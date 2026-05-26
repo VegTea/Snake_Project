@@ -229,7 +229,7 @@ class SnakeVelocityEventCfg:
         func=mdp.randomize_actuator_gains,
         mode="reset",
         params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=JOINT_NAMES),
+            "asset_cfg": SceneEntityCfg("robot", joint_names=YAW_JOINT_NAMES),
             "stiffness_distribution_params": (0.90, 1.10),
             "damping_distribution_params": (0.90, 1.10),
             "operation": "scale",
