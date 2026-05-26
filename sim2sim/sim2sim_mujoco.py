@@ -32,6 +32,7 @@ import random
 from dataclasses import dataclass
 from typing import Tuple, Dict, List
 
+import imageio
 import numpy as np
 import torch
 import mujoco
@@ -210,9 +211,13 @@ class CommandSampler:
 # ----------------------------- Runner -----------------------------
 
 class MujocoSim2SimRunner:
-    def __init__(self, mjcf_path: str, policy_path: str, cfg: LeggedGymLikeCfg, headless: bool):
+    def __init__(self, mjcf_path: str, policy_path: str, cfg: LeggedGymLikeCfg, headless: bool,
+                 record_video: bool = False, video_path: str = "sim2sim/videos/rollout.mp4", video_fps: float = 50.0):
         self.cfg = cfg
         self.headless = headless
+        self.record_video = record_video
+        self.video_path = video_path
+        self.video_fps = video_fps
 
         np.random.seed(cfg.seed)
         torch.manual_seed(cfg.seed)
@@ -277,6 +282,13 @@ class MujocoSim2SimRunner:
 
         # Viewer
         self.viewer = None
+        # Offscreen renderer for video recording
+        self.renderer = None
+        self._video_writer = None
+        self._video_frames: List[np.ndarray] = []
+        if self.record_video:
+            self.renderer = mujoco.Renderer(self.model, height=480, width=640)
+            print(f"[Runner] Video recording enabled, output: {self.video_path}")
         
         # Logs for tracking evaluation (velocity tracking)
         self._log_t: List[float] = []
@@ -680,6 +692,22 @@ class MujocoSim2SimRunner:
 
             mujoco.mj_step(self.model, self.data)
 
+            # 录像帧捕获：在mj_step后渲染，以策略频率(50Hz)采集帧，视角跟随机器人
+            if self.record_video and k % self.decimation == 0:
+                # 先更新场景几何
+                self.renderer.update_scene(self.data)
+                # 相机仅平移跟随机器人 base_link，垂直向下俯拍
+                robot_pos = self.data.xpos[self.base_body_id].copy()
+                cam_pos = robot_pos + np.array([-0.5, 0.0, 2.0])   # 正上方 3m
+                forward = np.array([0.0, 0.0, -1.0])              # 垂直向下
+                up = np.array([0.0, 1.0, 0.0])                    # y轴朝上（画面中前进方向为+y）
+                for cam in self.renderer.scene.camera:
+                    cam.pos[:] = cam_pos
+                    cam.forward[:] = forward
+                    cam.up[:] = up
+                frame_rgb = self.renderer.render()  # (H, W, 3) uint8 RGB
+                self._video_frames.append(frame_rgb)
+
             sim_t += self.mj_dt
 
             if realtime:
@@ -699,6 +727,22 @@ class MujocoSim2SimRunner:
         wall = time.time() - t0
         print(f"[Done] Sim {seconds:.2f}s, wall {wall:.2f}s, RTF={seconds / max(wall,1e-6):.2f}x")
 
+        # 保存录像
+        if self.record_video and self._video_frames:
+            self._save_video()
+
+    def _save_video(self):
+        """将渲染帧通过 imageio+ffmpeg 写入 MP4 视频文件"""
+        os.makedirs(os.path.dirname(self.video_path) or ".", exist_ok=True)
+        if not self._video_frames:
+            print("[Video] No frames captured, skip saving.")
+            return
+        writer = imageio.get_writer(self.video_path, fps=self.video_fps, format="FFMPEG", codec="libx264")
+        for frame_rgb in self._video_frames:
+            writer.append_data(frame_rgb)
+        writer.close()
+        print(f"[Video] Saved {len(self._video_frames)} frames to {self.video_path}")
+
 
 # ----------------------------- CLI -----------------------------
 
@@ -715,19 +759,24 @@ def parse_args():
     ap.add_argument("--lead", type=float, default=0.001, help="Sleep lead margin in seconds to reduce jitter (default 1ms)")
     ap.add_argument("--plot", type=int, default=1, help="1=save tracking plot at end, 0=disable")
     ap.add_argument("--plot_path", type=str, default="sim2sim/figures/velocity_tracking.png", help="Output path for the tracking plot")
-    ap.add_argument("--plot_show", type=int, default=1, help="1=show matplotlib window, 0=only save")
-    
+    ap.add_argument("--plot_show", type=int, default=0, help="1=show matplotlib window, 0=only save")
+
+    # 录像参数
+    ap.add_argument("--record_video", type=int, default=0, help="1=record simulation video, 0=no recording")
+    ap.add_argument("--video_path", type=str, default="sim2sim/videos/rollout.mp4", help="Output video path")
+    ap.add_argument("--video_fps", type=float, default=50.0, help="Video frame rate (should match policy Hz)")
+
     # Fixed command options (if not specified, use random sampling)
     ap.add_argument("--cmd_vx", type=float, default=0.0, help="Fixed vx command (m/s). If set, disables random sampling.")
     ap.add_argument("--cmd_vy", type=float, default=0.0, help="Fixed vy command (m/s). If set, disables random sampling.")
     ap.add_argument("--cmd_wz", type=float, default=0.0, help="Fixed wz command (rad/s) or heading target (rad) depending on heading_command. If set, disables random sampling.")
-    
+
     return ap.parse_args()
 
 
 def main():
     args = parse_args()
-    
+
     # Prepare fixed command if specified
     fixed_cmd = None
     if args.cmd_vx is not None or args.cmd_vy is not None or args.cmd_wz is not None:
@@ -739,9 +788,15 @@ def main():
         print(f"[Main] Using fixed command: vx={vx:.3f} m/s, vy={vy:.3f} m/s, wz/heading={wz:.3f}")
     else:
         print("[Main] Using random command sampling")
-    
+
     cfg = LeggedGymLikeCfg(device=args.device, seed=args.seed, fixed_command=fixed_cmd)
-    runner = MujocoSim2SimRunner(args.mjcf, args.policy, cfg, headless=bool(args.headless))
+    runner = MujocoSim2SimRunner(
+        args.mjcf, args.policy, cfg,
+        headless=bool(args.headless),
+        record_video=bool(args.record_video),
+        video_path=args.video_path,
+        video_fps=args.video_fps,
+    )
     runner.run(seconds=float(args.seconds), realtime=bool(args.realtime), realtime_factor=float(args.rtf), lead=float(args.lead))
     if int(args.plot) == 1:
         runner.plot_playback_tracking(plot_path=str(args.plot_path), show=bool(args.plot_show))
