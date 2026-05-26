@@ -50,6 +50,7 @@ try:
 except ImportError:
     raise ImportError("MuJoCo is required. Install with: pip install mujoco")
 
+os.environ['MUJOCO_GL']='egl'
 
 # ---------------------------------------------------------------------------
 # Config

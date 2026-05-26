@@ -162,6 +162,8 @@ class SnakeVelocityObservationsCfg:
 class SnakeVelocityEventCfg:
     """Configuration for reset and randomization events."""
 
+    # ---- 重置事件 ----
+    # 每个episode开始时重置蛇形机器人初始状态：随机化x位置(-0.2,0.2)，y/yaw/速度/关节位置固定为0
     reset_robot = EventTerm(
         func=mdp.reset_snake_state,
         mode="reset",
@@ -179,7 +181,10 @@ class SnakeVelocityEventCfg:
             },
         },
     )
-    """
+
+    # ---- 域随机化事件，增强sim2sim迁移鲁棒性 ----
+
+    # 材质摩擦随机化：静摩擦/动摩擦在0.3~1.0均匀采样，64个分桶保证一致性，仅启动时执行一次
     randomize_robot_material = EventTerm(
         func=mdp.randomize_rigid_body_material,
         mode="startup",
@@ -192,7 +197,8 @@ class SnakeVelocityEventCfg:
             "make_consistent": True,
         },
     )
-    
+
+    # 连杆质量随机化：每个episode重置时将各连杆质量缩放至标称值的90%~110%
     randomize_link_mass = EventTerm(
         func=mdp.randomize_rigid_body_mass,
         mode="reset",
@@ -204,6 +210,7 @@ class SnakeVelocityEventCfg:
         },
     )
 
+    # 质心位置随机化：每个episode重置时将各连杆质心沿x/y/z各偏移±5mm
     randomize_link_com = EventTerm(
         func=mdp.randomize_rigid_body_com,
         mode="reset",
@@ -216,8 +223,8 @@ class SnakeVelocityEventCfg:
             },
         },
     )
-    
 
+    # 执行器增益随机化：每个episode重置时将关节刚度/阻尼缩放到标称值的90%~110%
     randomize_actuator_gains = EventTerm(
         func=mdp.randomize_actuator_gains,
         mode="reset",
@@ -229,7 +236,6 @@ class SnakeVelocityEventCfg:
             "distribution": "uniform",
         },
     )
-    """
 
 @configclass
 class SnakeVelocityRewardsCfg:

@@ -8,6 +8,9 @@
 **/*.dmp
 **/.thumbs
 
+# MUJOCO
+MUJOCO_LOG.TXT
+
 # Python
 .DS_Store
 **/*.egg-info/
@@ -24,7 +27,8 @@ docker/.container.cfg
 # IDE
 **/.idea/
 **/.vscode/
-.sii/
+.ipynb_checkpoints/
+**/.sii/
 .claude/
 # Don't ignore the top-level .vscode directory as it is
 # used to configure VS Code settings

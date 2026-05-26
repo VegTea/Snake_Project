@@ -36,6 +36,8 @@ import numpy as np
 import torch
 import mujoco
 
+os.environ['MUJOCO_GL']='egl'
+
 # fix seeds for reproducibility
 SEED = 42
 random.seed(SEED)
