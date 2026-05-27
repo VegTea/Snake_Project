@@ -131,7 +131,7 @@ class VirtualChassisTrackLinVelXYExp(ManagerTermBase):
         body_lin_vel_w = self.asset.data.body_lin_vel_w[:, self.asset_cfg.body_ids, :]
         body_ang_vel_w = self.asset.data.body_ang_vel_w[:, self.asset_cfg.body_ids, :]
 
-        if not torch.isfinite(body_pos_w).all():
+        if not (torch.isfinite(body_pos_w).all() and torch.isfinite(body_lin_vel_w).all() and torch.isfinite(body_ang_vel_w).all()):
             return torch.zeros(self.num_envs, device=self.device)
 
         _, axes_w, actual_lin_vel_vc, _ = compute_virtual_chassis_command_terms(
@@ -191,7 +191,7 @@ class VirtualChassisTrackAngVelZExp(ManagerTermBase):
         body_lin_vel_w = self.asset.data.body_lin_vel_w[:, self.asset_cfg.body_ids, :]
         body_ang_vel_w = self.asset.data.body_ang_vel_w[:, self.asset_cfg.body_ids, :]
 
-        if not torch.isfinite(body_pos_w).all():
+        if not (torch.isfinite(body_pos_w).all() and torch.isfinite(body_lin_vel_w).all() and torch.isfinite(body_ang_vel_w).all()):
             return torch.zeros(self.num_envs, device=self.device)
 
         _, axes_w, _, actual_ang_vel_z_vc = compute_virtual_chassis_command_terms(
@@ -245,7 +245,7 @@ class VirtualChassisAngVelXYL2(ManagerTermBase):
         body_lin_vel_w = self.asset.data.body_lin_vel_w[:, self.asset_cfg.body_ids, :]
         body_ang_vel_w = self.asset.data.body_ang_vel_w[:, self.asset_cfg.body_ids, :]
 
-        if not torch.isfinite(body_pos_w).all():
+        if not (torch.isfinite(body_pos_w).all() and torch.isfinite(body_lin_vel_w).all() and torch.isfinite(body_ang_vel_w).all()):
             return torch.zeros(self.num_envs, device=self.device)
 
         _, axes_w, _, _ = compute_virtual_chassis_command_terms(
