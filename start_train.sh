@@ -3,5 +3,7 @@ python scripts/rsl_rl/train.py \
     --num_envs 4096 \
     --headless \
     --run_name exp1 \
-    --max_iterations 15000 \
+    --max_iterations 10000 \
+    --logger wandb \
+    --log_project_name Snake_Project \
     agent.save_interval=1000
