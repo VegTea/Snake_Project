@@ -199,30 +199,30 @@ class SnakeVelocityEventCfg:
     )
 
     # 连杆质量随机化：每个episode重置时将各连杆质量缩放至标称值的90%~110%
-    randomize_link_mass = EventTerm(
-        func=mdp.randomize_rigid_body_mass,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "mass_distribution_params": (0.90, 1.10),
-            "operation": "scale",
-            "distribution": "uniform",
-        },
-    )
+    # randomize_link_mass = EventTerm(
+    #     func=mdp.randomize_rigid_body_mass,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "mass_distribution_params": (0.90, 1.10),
+    #         "operation": "scale",
+    #         "distribution": "uniform",
+    #     },
+    # )
 
     # 质心位置随机化：每个episode重置时将各连杆质心沿x/y/z各偏移±5mm
-    randomize_link_com = EventTerm(
-        func=mdp.randomize_rigid_body_com,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "com_range": {
-                "x": (-0.005, 0.005),
-                "y": (-0.005, 0.005),
-                "z": (-0.005, 0.005),
-            },
-        },
-    )
+    # randomize_link_com = EventTerm(
+    #     func=mdp.randomize_rigid_body_com,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "com_range": {
+    #             "x": (-0.005, 0.005),
+    #             "y": (-0.005, 0.005),
+    #             "z": (-0.005, 0.005),
+    #         },
+    #     },
+    # )
 
     # 执行器增益随机化：每个episode重置时将关节刚度/阻尼缩放到标称值的90%~110%
     randomize_actuator_gains = EventTerm(
@@ -244,14 +244,24 @@ class SnakeVelocityRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.VirtualChassisTrackLinVelXYExp,
         weight=5.0,
-        params={"command_name": "base_velocity", "std": 0.4, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
+        params={
+            "command_name": "base_velocity",
+            "std": 0.4,
+            "linear_coef": 0.5,
+            "asset_cfg": virtual_chassis_body_cfg(),
+            "reward_clip_min": -20.0,
+        },
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.VirtualChassisTrackAngVelZExp,
         weight=1.0,
         params={"command_name": "base_velocity", "std": 0.25, "asset_cfg": virtual_chassis_body_cfg()},
     )
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    ang_vel_xy_l2 = RewTerm(
+        func=mdp.VirtualChassisAngVelXYL2,
+        weight=-0.05,
+        params={"asset_cfg": virtual_chassis_body_cfg(), "max_penalty": 10.0},
+    )
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
     joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
     raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
