@@ -250,6 +250,11 @@ class SnakeVelocityRewardsCfg:
             "soft_clamp": 2.0,
         },
     )
+    track_lin_vel_xy_exp = RewTerm(
+        func=mdp.VirtualChassisTrackLinVelXYExp,
+        weight=5.0,
+        params={"command_name": "base_velocity", "std": 0.4, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
+    )
     ang_vel_xy_l2 = RewTerm(
         func=mdp.VirtualChassisAngVelXYL2,
         weight=-0.05,
@@ -266,11 +271,7 @@ class SnakeVelocityRewardsCfg:
     joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.1, params={"asset_cfg": yaw_joint_cfg()})
     phase_propagation = RewTerm(func=mdp.phase_propagation, weight=0.3, params={"asset_cfg": yaw_joint_cfg()})
     motion_coordination = RewTerm(func=mdp.motion_coordination, weight=-0.5, params={"asset_cfg": yaw_joint_cfg()})
-    is_terminated = RewTerm(func=mdp.is_terminated, weight=-3.0)
-    contact_penalty = RewTerm(func=mdp.contact_penalty, weight=-0.02, params={
-        "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=list(VIRTUAL_CHASSIS_BODY_NAMES)),
-        "threshold": 0.0,
-    })
+    
 
 @configclass
 class SnakeVelocityTerminationsCfg:
