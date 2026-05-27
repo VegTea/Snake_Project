@@ -1,6 +1,6 @@
 python scripts/rsl_rl/play.py \
     --task Snake-VelocityTracking-Flat-Play-v0 \
-    --checkpoint logs/rsl_rl/snake_velocity_flat_tracking/2026-05-26_02-39-23/model_11800.pt \
+    --checkpoint wandb/run-20260527_052600-rza1vsy4/files/model_1000.pt \
     --video \
     --video_length 750 \
     --headless \

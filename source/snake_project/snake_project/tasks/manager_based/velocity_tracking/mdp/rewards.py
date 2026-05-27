@@ -212,6 +212,128 @@ class VirtualChassisTrackAngVelZExp(ManagerTermBase):
         return torch.exp(-ang_vel_error / std**2)
 
 
+class VirtualChassisTrackPlanarVelL2(ManagerTermBase):
+    """Negative planar velocity tracking error matching the evaluation MAE metric.
+
+    Computes: -sqrt((cmd_vx - vc_vx)^2 + (cmd_vy - vc_vy)^2 + vc_wz^2)
+
+    This replaces the exponential-kernel tracking rewards with a direct L2 error
+    penalty that provides linear gradient at any tracking accuracy level,
+    consistent with the sim2sim planner_MAE metric.
+    """
+
+    def __init__(self, cfg, env: "ManagerBasedRLEnv"):
+        super().__init__(cfg, env)
+        self.asset_cfg: SceneEntityCfg = cfg.params["asset_cfg"]
+        self.asset: Articulation = env.scene[self.asset_cfg.name]
+        self.prev_axes_w = torch.zeros(self.num_envs, 3, 3, device=self.device)
+        self.has_prev_axes = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
+    def reset(self, env_ids=None) -> dict[str, float]:
+        env_ids = _resolve_env_ids(self.num_envs, self.device, env_ids)
+        if env_ids is None:
+            self.prev_axes_w.zero_()
+            self.has_prev_axes.zero_()
+        else:
+            self.prev_axes_w[env_ids] = 0.0
+            self.has_prev_axes[env_ids] = False
+        return {}
+
+    def __call__(
+        self,
+        env: "ManagerBasedRLEnv",
+        command_name: str,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        soft_clamp: float = 2.0,
+    ) -> torch.Tensor:
+        body_pos_w = self.asset.data.body_pos_w[:, self.asset_cfg.body_ids, :]
+        body_lin_vel_w = self.asset.data.body_lin_vel_w[:, self.asset_cfg.body_ids, :]
+        body_ang_vel_w = self.asset.data.body_ang_vel_w[:, self.asset_cfg.body_ids, :]
+
+        if not (torch.isfinite(body_pos_w).all() and torch.isfinite(body_lin_vel_w).all() and torch.isfinite(body_ang_vel_w).all()):
+            return torch.zeros(self.num_envs, device=self.device)
+
+        _, axes_w, actual_lin_vel_vc, actual_ang_vel_z_vc = compute_virtual_chassis_command_terms(
+            body_pos_w=body_pos_w,
+            body_lin_vel_w=body_lin_vel_w,
+            body_ang_vel_w=body_ang_vel_w,
+            prev_axes_w=self.prev_axes_w,
+            has_prev=self.has_prev_axes,
+        )
+
+        if not torch.isfinite(axes_w).all() or not torch.isfinite(actual_lin_vel_vc).all():
+            return torch.zeros(self.num_envs, device=self.device)
+
+        self.prev_axes_w.copy_(axes_w)
+        self.has_prev_axes[:] = True
+
+        cmd = env.command_manager.get_command(command_name)
+        planar_error = torch.sqrt(
+            torch.sum(torch.square(cmd[:, :2] - actual_lin_vel_vc[:, :2]), dim=1)
+            + torch.square(actual_ang_vel_z_vc)
+        )
+        if soft_clamp is not None and soft_clamp > 0.0:
+            planar_error = soft_clamp * torch.tanh(planar_error / soft_clamp)
+        return -planar_error
+
+
+class VirtualChassisAngVelZL2(ManagerTermBase):
+    """Penalize z-axis angular velocity of the virtual chassis using L2 squared kernel.
+
+    Since the command for ang_vel_z is always 0, this term directly penalizes
+    unwanted yaw rotation of the virtual chassis.
+    """
+
+    def __init__(self, cfg, env: "ManagerBasedRLEnv"):
+        super().__init__(cfg, env)
+        self.asset_cfg: SceneEntityCfg = cfg.params["asset_cfg"]
+        self.asset: Articulation = env.scene[self.asset_cfg.name]
+        self.prev_axes_w = torch.zeros(self.num_envs, 3, 3, device=self.device)
+        self.has_prev_axes = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
+    def reset(self, env_ids=None) -> dict[str, float]:
+        env_ids = _resolve_env_ids(self.num_envs, self.device, env_ids)
+        if env_ids is None:
+            self.prev_axes_w.zero_()
+            self.has_prev_axes.zero_()
+        else:
+            self.prev_axes_w[env_ids] = 0.0
+            self.has_prev_axes[env_ids] = False
+        return {}
+
+    def __call__(
+        self,
+        env: "ManagerBasedRLEnv",
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        max_penalty: float = 10.0,
+    ) -> torch.Tensor:
+        body_pos_w = self.asset.data.body_pos_w[:, self.asset_cfg.body_ids, :]
+        body_lin_vel_w = self.asset.data.body_lin_vel_w[:, self.asset_cfg.body_ids, :]
+        body_ang_vel_w = self.asset.data.body_ang_vel_w[:, self.asset_cfg.body_ids, :]
+
+        if not (torch.isfinite(body_pos_w).all() and torch.isfinite(body_lin_vel_w).all() and torch.isfinite(body_ang_vel_w).all()):
+            return torch.zeros(self.num_envs, device=self.device)
+
+        _, axes_w, _, actual_ang_vel_z_vc = compute_virtual_chassis_command_terms(
+            body_pos_w=body_pos_w,
+            body_lin_vel_w=body_lin_vel_w,
+            body_ang_vel_w=body_ang_vel_w,
+            prev_axes_w=self.prev_axes_w,
+            has_prev=self.has_prev_axes,
+        )
+
+        if not torch.isfinite(axes_w).all():
+            return torch.zeros(self.num_envs, device=self.device)
+
+        self.prev_axes_w.copy_(axes_w)
+        self.has_prev_axes[:] = True
+
+        penalty = torch.square(actual_ang_vel_z_vc)
+        if max_penalty is not None:
+            return torch.clamp(penalty, max=max_penalty)
+        return penalty
+
+
 class VirtualChassisAngVelXYL2(ManagerTermBase):
     """对虚拟底盘xy轴角速度的L2惩罚：将各连杆平均角速度投影到虚拟底盘坐标系后取xy分量的L2范数平方。
 
