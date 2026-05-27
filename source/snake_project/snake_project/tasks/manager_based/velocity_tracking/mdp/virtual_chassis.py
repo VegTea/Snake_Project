@@ -9,13 +9,19 @@ def compute_virtual_chassis_frame(
     body_pos_w: torch.Tensor,
     prev_axes_w: torch.Tensor | None = None,
     has_prev: torch.Tensor | None = None,
+    reg: float = 1.0e-6,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Return the geometric center and principal axes of the virtual chassis."""
 
     origin_w = body_pos_w.mean(dim=1)
     centered_body_pos_w = body_pos_w - origin_w.unsqueeze(1)
     data_matrix = centered_body_pos_w.transpose(1, 2)
-    axes_w, _, _ = torch.linalg.svd(data_matrix, full_matrices=False)
+
+    gram = torch.bmm(data_matrix, data_matrix.transpose(1, 2))
+    eye = torch.eye(3, device=body_pos_w.device).unsqueeze(0)
+    gram_reg = gram + reg * eye * torch.amax(gram, dim=(1, 2), keepdim=True)
+    _, eigvecs = torch.linalg.eigh(gram_reg)
+    axes_w = torch.flip(eigvecs, dims=[2])
     axes_w = axes_w.clone()
 
     if prev_axes_w is not None and has_prev is not None:
