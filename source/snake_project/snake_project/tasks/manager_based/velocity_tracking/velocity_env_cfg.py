@@ -179,57 +179,57 @@ class SnakeVelocityEventCfg:
             },
         },
     )
-    """
-    randomize_robot_material = EventTerm(
-        func=mdp.randomize_rigid_body_material,
-        mode="startup",
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "static_friction_range": (0.3, 1.0),
-            "dynamic_friction_range": (0.3, 1.0),
-            "restitution_range": (0.0, 0.0),
-            "num_buckets": 64,
-            "make_consistent": True,
-        },
-    )
+   
+    # randomize_robot_material = EventTerm(
+    #     func=mdp.randomize_rigid_body_material,
+    #     mode="startup",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "static_friction_range": (0.3, 1.0),
+    #         "dynamic_friction_range": (0.3, 1.0),
+    #         "restitution_range": (0.0, 0.0),
+    #         "num_buckets": 64,
+    #         "make_consistent": True,
+    #     },
+    # )
     
-    randomize_link_mass = EventTerm(
-        func=mdp.randomize_rigid_body_mass,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "mass_distribution_params": (0.90, 1.10),
-            "operation": "scale",
-            "distribution": "uniform",
-        },
-    )
+    # randomize_link_mass = EventTerm(
+    #     func=mdp.randomize_rigid_body_mass,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "mass_distribution_params": (0.90, 1.10),
+    #         "operation": "scale",
+    #         "distribution": "uniform",
+    #     },
+    # )
 
-    randomize_link_com = EventTerm(
-        func=mdp.randomize_rigid_body_com,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "com_range": {
-                "x": (-0.005, 0.005),
-                "y": (-0.005, 0.005),
-                "z": (-0.005, 0.005),
-            },
-        },
-    )
+    # randomize_link_com = EventTerm(
+    #     func=mdp.randomize_rigid_body_com,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "com_range": {
+    #             "x": (-0.005, 0.005),
+    #             "y": (-0.005, 0.005),
+    #             "z": (-0.005, 0.005),
+    #         },
+    #     },
+    # )
     
 
     randomize_actuator_gains = EventTerm(
         func=mdp.randomize_actuator_gains,
         mode="reset",
         params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=JOINT_NAMES),
-            "stiffness_distribution_params": (0.90, 1.10),
-            "damping_distribution_params": (0.90, 1.10),
+            "asset_cfg": SceneEntityCfg("robot", joint_names=YAW_JOINT_NAMES),
+            "stiffness_distribution_params": (0.90, 1.1),
+            "damping_distribution_params": (0.90, 1.1),
             "operation": "scale",
             "distribution": "uniform",
         },
     )
-    """
+    
 
 @configclass
 class SnakeVelocityRewardsCfg:

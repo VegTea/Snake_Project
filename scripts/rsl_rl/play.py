@@ -40,6 +40,7 @@ parser.add_argument("--cmd_vx", type=float, default=0.0, help="Manual command: l
 parser.add_argument("--cmd_vy", type=float, default=0.0, help="Manual command: linear velocity y.")
 parser.add_argument("--cmd_wz", type=float, default=0.0, help="Manual command: angular velocity z.")
 parser.add_argument("--plot", action="store_true", default=False, help="Save PNG plots after playback.")
+parser.add_argument("--camera_top_down", action="store_true", default=False, help="Use top-down camera view for video recording.")
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -104,6 +105,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # override configurations with non-hydra CLI arguments
     agent_cfg: RslRlBaseRunnerCfg = cli_args.update_rsl_rl_cfg(agent_cfg, args_cli)
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+
+    # override camera for top-down view
+    if args_cli.camera_top_down:
+        env_cfg.viewer.eye = (0.0, 0.0, 3.0)
+        env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
 
     # set the environment seed
     # note: certain randomizations occur in the environment initialization so we set the seed here
