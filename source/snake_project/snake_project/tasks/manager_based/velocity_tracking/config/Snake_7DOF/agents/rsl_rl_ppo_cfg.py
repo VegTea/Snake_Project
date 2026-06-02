@@ -24,7 +24,7 @@ class SnakeVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         activation="elu",
     )
     algorithm = RslRlPpoAlgorithmCfg(
-        value_loss_coef=0.005,
+        value_loss_coef=0.01,
         use_clipped_value_loss=True,
         clip_param=0.2,
         entropy_coef=0.01,
