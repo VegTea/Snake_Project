@@ -160,6 +160,124 @@ class VirtualChassisTrackLinVelXYExp(ManagerTermBase):
         return raw_reward
 
 
+class VirtualChassisTrackLinVelXExp(ManagerTermBase):
+    """对虚拟底盘 x 方向线速度追踪的奖励：指数核奖励 - 线性惩罚项。"""
+
+    def __init__(self, cfg, env: "ManagerBasedRLEnv"):
+        super().__init__(cfg, env)
+        self.asset_cfg: SceneEntityCfg = cfg.params["asset_cfg"]
+        self.asset: Articulation = env.scene[self.asset_cfg.name]
+        self.prev_axes_w = torch.zeros(self.num_envs, 3, 3, device=self.device)
+        self.has_prev_axes = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
+    def reset(self, env_ids=None) -> dict[str, float]:
+        env_ids = _resolve_env_ids(self.num_envs, self.device, env_ids)
+        if env_ids is None:
+            self.prev_axes_w.zero_()
+            self.has_prev_axes.zero_()
+        else:
+            self.prev_axes_w[env_ids] = 0.0
+            self.has_prev_axes[env_ids] = False
+        return {}
+
+    def __call__(
+        self,
+        env: "ManagerBasedRLEnv",
+        command_name: str,
+        std: float,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        linear_coef: float = 0.0,
+        reward_clip_min: float = -20.0,
+    ) -> torch.Tensor:
+        body_pos_w = self.asset.data.body_pos_w[:, self.asset_cfg.body_ids, :]
+        body_lin_vel_w = self.asset.data.body_lin_vel_w[:, self.asset_cfg.body_ids, :]
+        body_ang_vel_w = self.asset.data.body_ang_vel_w[:, self.asset_cfg.body_ids, :]
+
+        if not (torch.isfinite(body_pos_w).all() and torch.isfinite(body_lin_vel_w).all() and torch.isfinite(body_ang_vel_w).all()):
+            return torch.zeros(self.num_envs, device=self.device)
+
+        _, axes_w, actual_lin_vel_vc, _ = compute_virtual_chassis_command_terms(
+            body_pos_w=body_pos_w,
+            body_lin_vel_w=body_lin_vel_w,
+            body_ang_vel_w=body_ang_vel_w,
+            prev_axes_w=self.prev_axes_w,
+            has_prev=self.has_prev_axes,
+        )
+
+        if not torch.isfinite(axes_w).all() or not torch.isfinite(actual_lin_vel_vc).all():
+            return torch.zeros(self.num_envs, device=self.device)
+
+        self.prev_axes_w.copy_(axes_w)
+        self.has_prev_axes[:] = True
+
+        lin_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 0] - actual_lin_vel_vc[:, 0])
+        exp_reward = torch.exp(-lin_vel_error / std**2)
+        lin_penalty = linear_coef * torch.sqrt(lin_vel_error)
+        raw_reward = exp_reward - lin_penalty
+        if reward_clip_min is not None:
+            return torch.clamp(raw_reward, min=reward_clip_min)
+        return raw_reward
+
+
+class VirtualChassisTrackLinVelYExp(ManagerTermBase):
+    """对虚拟底盘 y 方向线速度追踪的奖励：指数核奖励 - 线性惩罚项。"""
+
+    def __init__(self, cfg, env: "ManagerBasedRLEnv"):
+        super().__init__(cfg, env)
+        self.asset_cfg: SceneEntityCfg = cfg.params["asset_cfg"]
+        self.asset: Articulation = env.scene[self.asset_cfg.name]
+        self.prev_axes_w = torch.zeros(self.num_envs, 3, 3, device=self.device)
+        self.has_prev_axes = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+
+    def reset(self, env_ids=None) -> dict[str, float]:
+        env_ids = _resolve_env_ids(self.num_envs, self.device, env_ids)
+        if env_ids is None:
+            self.prev_axes_w.zero_()
+            self.has_prev_axes.zero_()
+        else:
+            self.prev_axes_w[env_ids] = 0.0
+            self.has_prev_axes[env_ids] = False
+        return {}
+
+    def __call__(
+        self,
+        env: "ManagerBasedRLEnv",
+        command_name: str,
+        std: float,
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        linear_coef: float = 0.0,
+        reward_clip_min: float = -20.0,
+    ) -> torch.Tensor:
+        body_pos_w = self.asset.data.body_pos_w[:, self.asset_cfg.body_ids, :]
+        body_lin_vel_w = self.asset.data.body_lin_vel_w[:, self.asset_cfg.body_ids, :]
+        body_ang_vel_w = self.asset.data.body_ang_vel_w[:, self.asset_cfg.body_ids, :]
+
+        if not (torch.isfinite(body_pos_w).all() and torch.isfinite(body_lin_vel_w).all() and torch.isfinite(body_ang_vel_w).all()):
+            return torch.zeros(self.num_envs, device=self.device)
+
+        _, axes_w, actual_lin_vel_vc, _ = compute_virtual_chassis_command_terms(
+            body_pos_w=body_pos_w,
+            body_lin_vel_w=body_lin_vel_w,
+            body_ang_vel_w=body_ang_vel_w,
+            prev_axes_w=self.prev_axes_w,
+            has_prev=self.has_prev_axes,
+        )
+
+        if not torch.isfinite(axes_w).all() or not torch.isfinite(actual_lin_vel_vc).all():
+            return torch.zeros(self.num_envs, device=self.device)
+
+        self.prev_axes_w.copy_(axes_w)
+        self.has_prev_axes[:] = True
+
+        lin_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 1] - actual_lin_vel_vc[:, 1])
+        exp_reward = torch.exp(-lin_vel_error / std**2)
+        lin_penalty = linear_coef * torch.sqrt(lin_vel_error)
+        raw_reward = exp_reward - lin_penalty
+        if reward_clip_min is not None:
+            return torch.clamp(raw_reward, min=reward_clip_min)
+        return raw_reward
+
+
 class VirtualChassisTrackAngVelZExp(ManagerTermBase):
     """对虚拟底盘偏航角速度追踪的奖励：指数核奖励 exp(-error^2/std^2)，追踪偏航角速度指令。"""
 
