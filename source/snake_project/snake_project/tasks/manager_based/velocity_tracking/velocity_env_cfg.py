@@ -179,20 +179,20 @@ class SnakeVelocityEventCfg:
             },
         },
     )
-    """
+   
     randomize_robot_material = EventTerm(
         func=mdp.randomize_rigid_body_material,
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "static_friction_range": (0.3, 1.0),
-            "dynamic_friction_range": (0.3, 1.0),
+            "static_friction_range": (0.9, 1.1),
+            "dynamic_friction_range": (0.8, 1.0),
             "restitution_range": (0.0, 0.0),
             "num_buckets": 64,
             "make_consistent": True,
         },
     )
-    
+    """
     randomize_link_mass = EventTerm(
         func=mdp.randomize_rigid_body_mass,
         mode="reset",
@@ -253,10 +253,10 @@ class SnakeVelocityRewardsCfg:
     phase_propagation = RewTerm(func=mdp.phase_propagation, weight=0.4, params={"asset_cfg": yaw_joint_cfg()})
     motion_coordination = RewTerm(func=mdp.motion_coordination, weight=-0.5, params={"asset_cfg": yaw_joint_cfg()})
     is_terminated = RewTerm(func=mdp.is_terminated, weight=-10.0)
-    contact_penalty = RewTerm(func=mdp.contact_penalty, weight=-5.0, params={
-        "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=list(VIRTUAL_CHASSIS_BODY_NAMES)),
-        "threshold": 0.0,
-    })
+    # contact_penalty = RewTerm(func=mdp.contact_penalty, weight=-5.0, params={
+    #     "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=list(VIRTUAL_CHASSIS_BODY_NAMES)),
+    #     "threshold": 0.0,
+    # })
 
 @configclass
 class SnakeVelocityTerminationsCfg:
