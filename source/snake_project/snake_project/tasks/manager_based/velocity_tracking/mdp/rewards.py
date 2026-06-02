@@ -37,18 +37,46 @@ def motion_coordination(env: "ManagerBasedRLEnv", asset_cfg: SceneEntityCfg = Sc
     return (pos_sign_mean + vel_sign_mean) / 2.0
 
 
-def phase_propagation(env: "ManagerBasedRLEnv", asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Reward alternating velocity directions between adjacent controlled joints."""
+def phase_propagation(
+    env: "ManagerBasedRLEnv",
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    target_phase_lag: float = torch.pi / 3.0,
+    command_name: str | None = None,
+    command_deadband: float = 0.03,
+    positive_vx_phase_sign: float = 1.0,
+) -> torch.Tensor:
+    """Reward adjacent controlled joints for maintaining a target phase lag."""
     asset: Articulation = env.scene[asset_cfg.name]
+    joint_pos = asset.data.joint_pos[:, asset_cfg.joint_ids]
     joint_vel = asset.data.joint_vel[:, asset_cfg.joint_ids]
 
     if joint_vel.shape[1] < 2:
         return torch.zeros(env.num_envs, device=env.device)
 
-    vel_product = joint_vel[:, :-1] * joint_vel[:, 1:]
-    vel_mag = torch.abs(joint_vel[:, :-1]) * torch.abs(joint_vel[:, 1:]) + 1.0e-6
-    normalized_product = vel_product / vel_mag
-    return -torch.mean(normalized_product, dim=1)
+    pos_scale = torch.mean(torch.abs(joint_pos), dim=1, keepdim=True).clamp_min(1.0e-3)
+    vel_scale = torch.mean(torch.abs(joint_vel), dim=1, keepdim=True).clamp_min(1.0e-3)
+    joint_phase = torch.atan2(joint_vel / vel_scale, joint_pos / pos_scale)
+    phase_lag = joint_phase[:, 1:] - joint_phase[:, :-1]
+    target_phase_lag = torch.full(
+        (env.num_envs, 1),
+        abs(float(target_phase_lag)),
+        device=env.device,
+        dtype=joint_phase.dtype,
+    )
+    if command_name is not None:
+        command_vx = env.command_manager.get_command(command_name)[:, 0:1]
+        phase_sign = torch.where(
+            command_vx >= command_deadband,
+            positive_vx_phase_sign,
+            torch.where(command_vx <= -command_deadband, -positive_vx_phase_sign, 0.0),
+        )
+        target_phase_lag = target_phase_lag * phase_sign
+
+    phase_error = torch.atan2(
+        torch.sin(phase_lag - target_phase_lag),
+        torch.cos(phase_lag - target_phase_lag),
+    )
+    return torch.mean(torch.cos(phase_error), dim=1)
 
 
 class RawActionRatePenalty(ManagerTermBase):

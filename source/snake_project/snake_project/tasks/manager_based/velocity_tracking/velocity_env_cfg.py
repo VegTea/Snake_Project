@@ -185,7 +185,7 @@ class SnakeVelocityEventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "static_friction_range": (0.9, 1.1),
+            "static_friction_range": (0.9, 1.0),
             "dynamic_friction_range": (0.8, 1.0),
             "restitution_range": (0.0, 0.0),
             "num_buckets": 64,
@@ -250,7 +250,17 @@ class SnakeVelocityRewardsCfg:
     joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
     raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
     joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.2, params={"asset_cfg": yaw_joint_cfg()})
-    phase_propagation = RewTerm(func=mdp.phase_propagation, weight=0.4, params={"asset_cfg": yaw_joint_cfg()})
+    phase_propagation = RewTerm(
+        func=mdp.phase_propagation,
+        weight=1.0,
+        params={
+            "asset_cfg": yaw_joint_cfg(),
+            "target_phase_lag": math.pi / 3.0,
+            "command_name": "base_velocity",
+            "command_deadband": 0.03,
+            "positive_vx_phase_sign": -1.0,
+        },
+    )
     motion_coordination = RewTerm(func=mdp.motion_coordination, weight=-0.5, params={"asset_cfg": yaw_joint_cfg()})
     is_terminated = RewTerm(func=mdp.is_terminated, weight=-10.0)
     # contact_penalty = RewTerm(func=mdp.contact_penalty, weight=-5.0, params={
