@@ -1,3 +1,8 @@
+CHECKPOINT=$1
+LOG_DIR="${LOG_DIR:-$(dirname "${CHECKPOINT}")}"
+RUN_NAME=
+CHECK_POINT_NAME=
+
 python scripts/rsl_rl/train.py \
     --task Snake-VelocityTracking-Flat-v0 \
     --num_envs 4096 \

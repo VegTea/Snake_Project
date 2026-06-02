@@ -15,7 +15,7 @@ INNER_VY = {-0.05, 0.0, 0.05}
 
 def main():
     parser = argparse.ArgumentParser(description="计算加权 planar MAE")
-    parser.add_argument("csv_path", nargs="?", default="eval_output/data/eval_mae.csv",
+    parser.add_argument("--csv_path", type=str, default="eval_output/data/eval_mae.csv",
                         help="eval_mae.csv 路径")
     args = parser.parse_args()
 

@@ -162,8 +162,6 @@ class SnakeVelocityObservationsCfg:
 class SnakeVelocityEventCfg:
     """Configuration for reset and randomization events."""
 
-    # ---- 重置事件 ----
-    # 每个episode开始时重置蛇形机器人初始状态：随机化x位置(-0.2,0.2)，y/yaw/速度/关节位置固定为0
     reset_robot = EventTerm(
         func=mdp.reset_snake_state,
         mode="reset",
@@ -182,9 +180,6 @@ class SnakeVelocityEventCfg:
         },
     )
 
-    # ---- 域随机化事件，增强sim2sim迁移鲁棒性 ----
-
-    # 材质摩擦随机化：静摩擦/动摩擦在0.3~1.0均匀采样，64个分桶保证一致性，仅启动时执行一次
     # randomize_robot_material = EventTerm(
     #     func=mdp.randomize_rigid_body_material,
     #     mode="startup",
@@ -197,8 +192,7 @@ class SnakeVelocityEventCfg:
     #         "make_consistent": True,
     #     },
     # )
-
-    # 连杆质量随机化：每个episode重置时将各连杆质量缩放至标称值的90%~110%
+    
     # randomize_link_mass = EventTerm(
     #     func=mdp.randomize_rigid_body_mass,
     #     mode="reset",
@@ -210,7 +204,6 @@ class SnakeVelocityEventCfg:
     #     },
     # )
 
-    # 质心位置随机化：每个episode重置时将各连杆质心沿x/y/z各偏移±5mm
     # randomize_link_com = EventTerm(
     #     func=mdp.randomize_rigid_body_com,
     #     mode="reset",
@@ -224,7 +217,6 @@ class SnakeVelocityEventCfg:
     #     },
     # )
 
-    # 执行器增益随机化：每个episode重置时将关节刚度/阻尼缩放到标称值的90%~110%
     # randomize_actuator_gains = EventTerm(
     #     func=mdp.randomize_actuator_gains,
     #     mode="reset",
@@ -241,37 +233,23 @@ class SnakeVelocityEventCfg:
 class SnakeVelocityRewardsCfg:
     """Reward terms for the velocity-tracking task."""
 
-    track_planar_vel_l2 = RewTerm(
-        func=mdp.VirtualChassisTrackPlanarVelL2,
-        weight=3.0,
-        params={
-            "command_name": "base_velocity",
-            "asset_cfg": virtual_chassis_body_cfg(),
-            "soft_clamp": 2.0,
-        },
-    )
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.VirtualChassisTrackLinVelXYExp,
         weight=5.0,
         params={"command_name": "base_velocity", "std": 0.4, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
     )
-    ang_vel_xy_l2 = RewTerm(
-        func=mdp.VirtualChassisAngVelXYL2,
-        weight=-0.05,
-        params={"asset_cfg": virtual_chassis_body_cfg(), "max_penalty": 10.0},
+    track_ang_vel_z_exp = RewTerm(
+        func=mdp.VirtualChassisTrackAngVelZExp,
+        weight=1.0,
+        params={"command_name": "base_velocity", "std": 0.25, "asset_cfg": virtual_chassis_body_cfg()},
     )
-    ang_vel_z_l2 = RewTerm(
-        func=mdp.VirtualChassisAngVelZL2,
-        weight=-1.0,
-        params={"asset_cfg": virtual_chassis_body_cfg(), "max_penalty": 10.0},
-    )
+    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
     joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
     raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
-    joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.1, params={"asset_cfg": yaw_joint_cfg()})
-    phase_propagation = RewTerm(func=mdp.phase_propagation, weight=0.3, params={"asset_cfg": yaw_joint_cfg()})
+    joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.2, params={"asset_cfg": yaw_joint_cfg()})
+    phase_propagation = RewTerm(func=mdp.phase_propagation, weight=0.4, params={"asset_cfg": yaw_joint_cfg()})
     motion_coordination = RewTerm(func=mdp.motion_coordination, weight=-0.5, params={"asset_cfg": yaw_joint_cfg()})
-    
 
 @configclass
 class SnakeVelocityTerminationsCfg:
@@ -294,17 +272,17 @@ class SnakeVelocityTerminationsCfg:
 class SnakeVelocityCurriculumCfg:
     """Curriculum hooks for the velocity-tracking task."""
 
-    # command = CurrTerm(
-    #     func=mdp.command_velocity_curriculum,
-    #     params={
-    #         "command_name": "base_velocity",
-    #         "reward_term_name": "track_lin_vel_xy_exp",
-    #         "max_curriculum": 0.4,
-    #         "min_curriculum": 0.1,
-    #         "step_size": 0.05,
-    #         "threshold_ratio": 0.8,
-    #     },
-    # )
+    command = CurrTerm(
+        func=mdp.command_velocity_curriculum,
+        params={
+            "command_name": "base_velocity",
+            "reward_term_name": "track_lin_vel_xy_exp",
+            "max_curriculum": 0.4,
+            "min_curriculum": 0.1,
+            "step_size": 0.05,
+            "threshold_ratio": 0.8,
+        },
+    )
 
 
 @configclass
