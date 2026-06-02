@@ -93,8 +93,8 @@ class SnakeVelocityCommandsCfg:
         velocity_marker_max_speed=0.75,
         velocity_marker_z_offset=0.10,
         ranges=mdp.VirtualChassisVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.4, 0.4),
-            lin_vel_y=(-0.2, 0.2),
+            lin_vel_x=(-0.2, 0.2),
+            lin_vel_y=(-0.1, 0.1),
             ang_vel_z=(-0.0, 0.0),
             heading=(-0.0, 0.0),
         ),
@@ -291,7 +291,7 @@ class SnakeVelocityCurriculumCfg:
         params={
             "command_name": "base_velocity",
             "reward_term_name": "track_lin_vel_x_exp",
-            "max_curriculum": 0.4,
+            "max_curriculum": 0.2,
             "min_curriculum": 0.1,
             "step_size": 0.05,
             "threshold_ratio": 0.8,
@@ -302,8 +302,8 @@ class SnakeVelocityCurriculumCfg:
         params={
             "command_name": "base_velocity",
             "reward_term_name": "track_lin_vel_y_exp",
-            "max_curriculum": 0.4,
-            "min_curriculum": 0.1,
+            "max_curriculum": 0.1,
+            "min_curriculum": 0.05,
             "step_size": 0.05,
             "threshold_ratio": 0.8,
         },

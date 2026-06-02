@@ -24,8 +24,8 @@ class SnakeVelocityFlatEnvCfg_PLAY(SnakeVelocityFlatEnvCfg):
         self.scene.num_envs = 1
         self.scene.env_spacing = 2.5
         self.episode_length_s = 10.0
-        self.commands.base_velocity.ranges.lin_vel_x = (-0.4, 0.4)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.4, 0.4)
+        self.commands.base_velocity.ranges.lin_vel_x = (-0.2, 0.2)
+        self.commands.base_velocity.ranges.lin_vel_y = (-0.1, 0.1)
         self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
         self.observations.policy.enable_corruption = False
         self.observations.critic.enable_corruption = False
