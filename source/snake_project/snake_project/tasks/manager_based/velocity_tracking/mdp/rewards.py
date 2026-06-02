@@ -1,17 +1,17 @@
 """
-最终奖励函数由以下 11 项加权求和构成：
+最终奖励函数由以下项加权求和构成：
 
- 1. track_lin_vel_xy_exp      权重  5.0   虚拟底盘框架下平面线速度追踪奖励（指数核 - 线性惩罚）
- 2. track_ang_vel_z_exp       权重  1.0   虚拟底盘框架下偏航角速度追踪奖励（指数核）
- 3. ang_vel_xy_l2             权重 -0.05  对虚拟底盘xy轴角速度的L2惩罚
- 4. joint_torques_l2          权重 -1e-4  对关节力矩的L2惩罚（节能正则）
- 5. joint_acc_l2              权重 -2.5e-7 对关节加速度的L2惩罚（平滑正则）
- 6. raw_action_rate           权重 -0.01  对原始动作变化速率的L2惩罚（动作平滑）
- 7. joint_amplitude           权重  0.2   对关节持续运动幅度的奖励（鼓励持续运动）
- 8. phase_propagation         权重  0.4   对相邻关节速度方向交替的奖励（相位传播/蜿蜒步态）
- 9. motion_coordination       权重 -0.5   对所有关节同时同向运动的惩罚（抑制直线蠕动）
-10. is_terminated             权重 -10.0  终止惩罚（激励存活）
-11. contact_penalty           权重 -5.0   对虚拟底盘连杆接触地面的惩罚（抑制非蜿蜒接触）
+ 1. track_lin_vel_x_exp       权重  2.5   虚拟底盘框架下 x 方向线速度追踪奖励（指数核 - 线性惩罚）
+ 2. track_lin_vel_y_exp       权重  2.5   虚拟底盘框架下 y 方向线速度追踪奖励（指数核 - 线性惩罚）
+ 3. track_planar_vel_l2       权重  2.0   对齐 sim2sim planar_MAE 的虚拟底盘平面速度误差惩罚
+ 4. track_ang_vel_z_exp       权重  1.0   虚拟底盘框架下偏航角速度追踪奖励（指数核）
+ 5. ang_vel_xy_l2             权重 -0.05  对虚拟底盘xy轴角速度的L2惩罚
+ 6. joint_torques_l2          权重 -1e-4  对关节力矩的L2惩罚（节能正则）
+ 7. joint_acc_l2              权重 -2.5e-7 对关节加速度的L2惩罚（平滑正则）
+ 8. raw_action_rate           权重 -0.01  对原始动作变化速率的L2惩罚（动作平滑）
+ 9. joint_amplitude           权重  0.2   对关节持续运动幅度的奖励（鼓励持续运动）
+10. phase_propagation         权重  0.4   对相邻关节速度方向交替的奖励（相位传播/蜿蜒步态）
+11. motion_coordination       权重 -0.5   对所有关节同时同向运动的惩罚（抑制直线蠕动）
 """
 
 from __future__ import annotations

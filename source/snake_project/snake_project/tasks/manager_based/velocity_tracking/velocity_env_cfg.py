@@ -243,6 +243,11 @@ class SnakeVelocityRewardsCfg:
         weight=2.5,
         params={"command_name": "base_velocity", "std": 0.4, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
     )
+    track_planar_vel_l2 = RewTerm(
+        func=mdp.VirtualChassisTrackPlanarVelL2,
+        weight=2.0,
+        params={"command_name": "base_velocity", "asset_cfg": virtual_chassis_body_cfg(), "soft_clamp": 2.0},
+    )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.VirtualChassisTrackAngVelZExp,
         weight=1.0,
