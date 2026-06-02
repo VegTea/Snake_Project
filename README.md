@@ -46,10 +46,11 @@
     ```bash
     pip install "isaacsim[all,extscache]==5.1.0" --extra-index-url https://pypi.nvidia.com
 
-- 克隆IsaacLab的项目，由于作者使用的是老版本的IsaacLab，直接克隆最新的可能会报错，因此作者将本版本上传到Github上，请克隆作者的版本。
+- 克隆IsaacLab的项目，由于作者使用的是老版本的IsaacLab，直接克隆最新的可能会报错，因此作者将本版本上传到Github上，请克隆作者的版本。【或者直接解压压缩包】
 
     ```bash
     git clone https://github.com/Zomnk/Isaac_Old_Version.git
+    # 克隆后请将文件夹名称修改为IsaacLab
     ```
 
 - 接下来安装IsaacLab的环境
@@ -100,7 +101,7 @@
 - 列出可以使用的环境
 
   ```bash
-  python scripts/list_envs.py
+  python scripts/list_envs.py --headless
   ```
 
   > 本项目中使用的环境为 Snake-VelocityTracking-Flat-v0 和 Snake-VelocityTracking-Flat-Play-v0
@@ -108,7 +109,7 @@
 - 运行训练代码
 
   ```bash
-  python scripts/rsl_rl/train.py --task Snake-VelocityTracking-Flat-v0 --num_envs 4096
+  python scripts/rsl_rl/train.py --task Snake-VelocityTracking-Flat-v0 --num_envs 4096 --headless
   ```
 
 - 执行训练好的策略
@@ -130,6 +131,22 @@
   ```bash
   conda env list
   conda activate lab23
+  ```
+
+- 克隆IsaacLab的项目，由于作者使用的是老版本的IsaacLab，直接克隆最新的可能会报错，因此作者将本版本上传到Github上，请克隆作者的版本。【或者直接解压压缩包】
+
+  ```bash
+  git clone https://github.com/Zomnk/Isaac_Old_Version.git
+  # 克隆后请将文件夹名称修改为IsaacLab
+  ```
+
+- 接下来安装IsaacLab的环境
+
+  ```bash
+  # Linux
+  ./isaaclab.sh --install # or "./isaaclab.sh -i"
+  # Windows
+  isaaclab.bat --install :: or "isaaclab.bat -i"
   ```
 
 - 克隆本训练项目
@@ -180,7 +197,7 @@
 
 * **velocity_env_cfg.py**
 
-  * **观测量**，PolicyCfg不可以修改，CriticCfg特权观测可以修改，噪声幅度与缩放比例可以修改
+  * **观测量**：PolicyCfg可以修改，必须是本体的观测信息（本体是14个舵机，可以反馈位置、速度、扭矩、温度信息，头部IMU是一个六轴的IMU，可以反馈三轴加速度和三轴角速度）；CriticCfg特权观测不必局限于本体观测，可以任意修改。噪声幅度与缩放比例可以修改。
 
     ```python
     class SnakeVelocityObservationsCfg:
@@ -224,7 +241,7 @@
         critic: CriticCfg = CriticCfg()
     ```
 
-  * **域随机化**：当前没有开启域随机化内容，如果sim2sim状况不理想，可考虑添加域随机化内容增强策略的鲁棒性
+  * **域随机化**：当前没有开启域随机化内容，如果sim2sim状况不理想，可考虑添加域随机化内容增强策略的鲁棒性。
 
     ```python
     class SnakeVelocityEventCfg:
@@ -249,7 +266,7 @@
         )
     ```
 
-  * **奖励函数**：当前奖励函数较基础，可自行添加新的奖励函数，修改奖励函数的权重来促进训练
+  * **奖励函数**：当前奖励函数较基础，可自行添加新的奖励函数，修改奖励函数的权重来促进训练。
 
     ```Python
     class SnakeVelocityRewardsCfg:
@@ -274,7 +291,7 @@
         motion_coordination = RewTerm(func=mdp.motion_coordination, weight=-0.3, params={"asset_cfg": yaw_joint_cfg()})
     ```
 
-  * **课程学习**：可以修改当前课程学习的实现形式与相关参数，来促进训练的平稳
+  * **课程学习**：可以修改当前课程学习的实现形式与相关参数，来促进训练的平稳。
 
     ```python
     class SnakeVelocityCurriculumCfg:
@@ -292,7 +309,7 @@
         )
     ```
 
-  - **action输出**：若端到端性能不佳，可考虑其他方法
+  - **action输出**：若端到端性能不佳，可考虑其他方法。
 
     ```python
     @configclass
