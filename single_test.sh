@@ -1,3 +1,4 @@
+LOG_DIR=$1
 export MUJOCO_GL=egl
 python sim2sim/sim2sim_mujoco.py \
     --cmd_vx 0.3 \
@@ -6,4 +7,4 @@ python sim2sim/sim2sim_mujoco.py \
     --record_video 1 \
     --video_path sim2sim/videos/rollout.mp4 \
     --seconds 15.0 \
-    --policy logs/rsl_rl/snake_velocity_flat_tracking/2026-05-26_02-39-23/exported/policy.pt
+    --policy "${LOG_DIR}/exported/policy.pt"
