@@ -243,7 +243,11 @@ class SnakeVelocityRewardsCfg:
         weight=1.0,
         params={"command_name": "base_velocity", "std": 0.25, "asset_cfg": virtual_chassis_body_cfg()},
     )
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    ang_vel_xy_l2 = RewTerm(
+        func=mdp.VirtualChassisAngVelXYL2,
+        weight=-0.05,
+        params={"asset_cfg": virtual_chassis_body_cfg(), "max_penalty": 10.0},
+    )
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
     joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
     raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
