@@ -13,6 +13,7 @@ python scripts/rsl_rl/play.py \
     env.episode_length_s=15.0
 export MUJOCO_GL=egl
 python sim2sim/sim2sim_eval.py \
+    --output-dir "${LOG_DIR}/eval_output" \
     --policy "${LOG_DIR}/exported/policy.pt"
 python sim2sim/calc_weighted_mae.py \
     --csv_path "${LOG_DIR}/eval_output/data/eval_mae.csv"
