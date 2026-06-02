@@ -1,14 +1,14 @@
 CHECKPOINT=$1
-LOG_DIR="${LOG_DIR:-$(dirname "${CHECKPOINT}")}"
-RUN_NAME=
-CHECK_POINT_NAME=
+CHECKPOINT_NAME=$(basename "${CHECKPOINT}")
+RUN_NAME=$(basename "$(dirname "${CHECKPOINT}")")
+LOG_DIR=$(dirname "${CHECKPOINT}")
 
 python scripts/rsl_rl/train.py \
     --task Snake-VelocityTracking-Flat-v0 \
     --num_envs 4096 \
     --headless \
     --resume \
-    --load_run 2026-05-25_13-52-55 \
-    --checkpoint model_4999.pt \
-    --max_iterations 6999 \
+    --load_run "${RUN_NAME}" \
+    --checkpoint "${CHECKPOINT_NAME}" \
+    --max_iterations 5000 \
     agent.experiment_name=snake_velocity_flat_tracking
