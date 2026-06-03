@@ -8,4 +8,4 @@ python scripts/rsl_rl/train.py \
     --max_iterations 10000 \
     --logger wandb \
     --log_project_name Snake_Project \
-    agent.save_interval=1000
+    agent.save_interval=500
