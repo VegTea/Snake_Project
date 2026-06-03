@@ -237,13 +237,13 @@ class SnakeVelocityRewardsCfg:
 
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.VirtualChassisTrackLinVelXYExp,
-        weight=2.0,
+        weight=5.0,
         params={"command_name": "base_velocity", "std": 0.4, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.VirtualChassisTrackAngVelZExp,
-        weight=1.0,
-        params={"command_name": "base_velocity", "std": 0.25, "asset_cfg": virtual_chassis_body_cfg()},
+        weight=5.0,
+        params={"command_name": "base_velocity", "std": 0.4, "asset_cfg": virtual_chassis_body_cfg()},
     )
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
@@ -325,17 +325,17 @@ class SnakeVelocityCurriculumCfg:
             "steps_per_iteration": 24,
             "gait_weights": {
                 "track_lin_vel_xy_exp": 0.0,
-                "sine_wave_position": 4.0,
+                "sine_wave_position": 5.0,
                 "sine_wave_velocity": 0.5,
-                "phase_propagation": 3.0,
+                "phase_propagation": 0.5,
                 "joint_amplitude": 0.3,
             },
             "velocity_weights": {
                 "track_lin_vel_xy_exp": 5.0,
                 "sine_wave_position": 0.0,
                 "sine_wave_velocity": 0.0,
-                "phase_propagation": 0.4,
-                "joint_amplitude": 0.2,
+                "phase_propagation": 1.0,
+                "joint_amplitude": 0.3,
             },
         },
     )
