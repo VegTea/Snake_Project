@@ -106,13 +106,20 @@ class SnakeVelocityCommandsCfg:
 class SnakeVelocityActionsCfg:
     """Action specifications for the velocity-tracking MDP."""
 
-    joint_pos = mdp.JointPositionActionCfg(
+    joint_pos = mdp.SineGaitActionCfg(
         asset_name="robot",
         joint_names=YAW_JOINT_NAMES,
-        scale=0.25,
-        use_default_offset=True,
         preserve_order=True,
-        clip={"yaw.*": (-1.57, 1.57)},
+        action_scale=0.25,
+        amplitude=0.20,
+        phase_lag=math.pi / 3.0,
+        frequency_min=0.0,
+        frequency_max=2.0,
+        bias_max=0.35,
+        command_name="base_velocity",
+        command_deadband=0.03,
+        positive_vx_phase_sign=1.0,
+        target_clip=(-1.57, 1.57),
     )
 
 
@@ -237,18 +244,29 @@ class SnakeVelocityRewardsCfg:
 
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.VirtualChassisTrackLinVelXYExp,
-        weight=4.0,
+        weight=5.0,
         params={"command_name": "base_velocity", "std": 0.1, "linear_coef": 1.0, "asset_cfg": virtual_chassis_body_cfg()},
     )
+    
     track_ang_vel_z_exp = RewTerm(
         func=mdp.VirtualChassisTrackAngVelZExp,
-        weight=6.0,
+        weight=5.0,
         params={"command_name": "base_velocity", "std": 0.1, "linear_coef": 1.0, "asset_cfg": virtual_chassis_body_cfg()},
     )
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
-    joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
-    raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
+    # ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    
+    # joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
+    
+    # joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
+    
+    # raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
+
+    joint_pos_rate = RewTerm(
+        func=mdp.JointPositionRatePenalty,
+        weight=-2.0,
+        params={"asset_cfg": yaw_joint_cfg(), "rate_clip": 0.5},
+    )
+    
     # sine_wave_position = RewTerm(
     #     func=mdp.sine_wave_position_tracking,
     #     weight=4.0,
@@ -277,20 +295,25 @@ class SnakeVelocityRewardsCfg:
     #         "positive_vx_phase_sign": -1.0,
     #     },
     # )
-    joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.3, params={"asset_cfg": yaw_joint_cfg()})
-    phase_propagation = RewTerm(
-        func=mdp.phase_propagation,
-        weight=1.0,
-        params={
-            "asset_cfg": yaw_joint_cfg(),
-            "target_phase_lag": math.pi / 3.0,
-            "command_name": "base_velocity",
-            "command_deadband": 0.03,
-            "positive_vx_phase_sign": -1.0,
-        },
-    )
-    motion_coordination = RewTerm(func=mdp.motion_coordination, weight=-0.5, params={"asset_cfg": yaw_joint_cfg()})
+    
+    # joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.3, params={"asset_cfg": yaw_joint_cfg()})
+    
+    # phase_propagation = RewTerm(
+    #     func=mdp.phase_propagation,
+    #     weight=1.0,
+    #     params={
+    #         "asset_cfg": yaw_joint_cfg(),
+    #         "target_phase_lag": math.pi / 3.0,
+    #         "command_name": "base_velocity",
+    #         "command_deadband": 0.03,
+    #         "positive_vx_phase_sign": -1.0,
+    #     },
+    # )
+    
+    # motion_coordination = RewTerm(func=mdp.motion_coordination, weight=-0.5, params={"asset_cfg": yaw_joint_cfg()})
+    
     is_terminated = RewTerm(func=mdp.is_terminated, weight=-10.0)
+    
     # contact_penalty = RewTerm(func=mdp.contact_penalty, weight=-5.0, params={
     #     "sensor_cfg": SceneEntityCfg("contact_sensor", body_names=list(VIRTUAL_CHASSIS_BODY_NAMES)),
     #     "threshold": 0.0,

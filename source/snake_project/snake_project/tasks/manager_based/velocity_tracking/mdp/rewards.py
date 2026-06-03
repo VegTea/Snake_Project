@@ -200,6 +200,45 @@ class RawActionRatePenalty(ManagerTermBase):
         return torch.sum(torch.square(delta), dim=1)
 
 
+class JointPositionRatePenalty(ManagerTermBase):
+    """L2 penalty on first-order controlled-joint position changes."""
+
+    def __init__(self, cfg, env: "ManagerBasedRLEnv"):
+        super().__init__(cfg, env)
+        params = getattr(cfg, "params", {}) or {}
+        self.asset_cfg: SceneEntityCfg = params.get("asset_cfg", SceneEntityCfg("robot"))
+        self.asset: Articulation = env.scene[self.asset_cfg.name]
+        self.prev_joint_pos = None
+        self.rate_clip = float(params.get("rate_clip", 1.0))
+
+    def reset(self, env_ids=None) -> dict[str, float]:
+        if self.prev_joint_pos is None:
+            return {}
+        env_ids = _resolve_env_ids(self.num_envs, self.device, env_ids)
+        joint_pos = self.asset.data.joint_pos[:, self.asset_cfg.joint_ids]
+        if env_ids is None:
+            self.prev_joint_pos.copy_(joint_pos)
+        else:
+            self.prev_joint_pos[env_ids] = joint_pos[env_ids]
+        return {}
+
+    def __call__(
+        self,
+        env: "ManagerBasedRLEnv",
+        asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        rate_clip: float | None = None,
+    ) -> torch.Tensor:
+        joint_pos = self.asset.data.joint_pos[:, self.asset_cfg.joint_ids]
+        if self.prev_joint_pos is None:
+            self.prev_joint_pos = joint_pos.clone()
+        delta = joint_pos - self.prev_joint_pos
+        clip = self.rate_clip if rate_clip is None else float(rate_clip)
+        if clip > 0.0:
+            delta = torch.clamp(delta, min=-clip, max=clip)
+        self.prev_joint_pos.copy_(joint_pos)
+        return torch.sum(torch.square(delta), dim=1)
+
+
 class VirtualChassisTrackLinVelXYExp(ManagerTermBase):
     """Reward planar command tracking in the virtual chassis frame."""
 

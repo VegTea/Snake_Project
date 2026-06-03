@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import copy
+import math
+import os
+
+import torch
+
+
+class SineGaitPolicyExporter(torch.nn.Module):
+    """TorchScript wrapper that converts [frequency, bias] actor outputs to 7 joint actions."""
+
+    def __init__(
+        self,
+        policy,
+        normalizer=None,
+        amplitude: float = 0.20,
+        phase_lag: float = math.pi / 3.0,
+        action_scale: float = 0.25,
+        frequency_min: float = 0.0,
+        frequency_max: float = 2.0,
+        bias_max: float = 0.35,
+        policy_dt: float = 0.02,
+        command_deadband: float = 0.03,
+        positive_vx_phase_sign: float = 1.0,
+        num_joints: int = 7,
+    ):
+        super().__init__()
+        if getattr(policy, "is_recurrent", False):
+            raise ValueError("SineGaitPolicyExporter currently supports non-recurrent actor policies only.")
+        if hasattr(policy, "actor"):
+            self.actor = copy.deepcopy(policy.actor)
+        elif hasattr(policy, "student"):
+            self.actor = copy.deepcopy(policy.student)
+        else:
+            raise ValueError("Policy does not have an actor/student module.")
+        self.normalizer = copy.deepcopy(normalizer) if normalizer is not None else torch.nn.Identity()
+
+        self.amplitude = float(amplitude)
+        self.phase_lag = float(abs(phase_lag))
+        self.action_scale = float(action_scale)
+        self.frequency_min = float(frequency_min)
+        self.frequency_max = float(frequency_max)
+        self.bias_max = float(bias_max)
+        self.policy_dt = float(policy_dt)
+        self.command_deadband = float(command_deadband)
+        self.positive_vx_phase_sign = float(positive_vx_phase_sign)
+
+        self.register_buffer("phase", torch.zeros(1, 1))
+        self.register_buffer("joint_index", torch.arange(num_joints, dtype=torch.float32).unsqueeze(0))
+
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:
+        raw_action = self.actor(self.normalizer(obs))
+        raw_frequency = raw_action[:, 0:1]
+        raw_bias = raw_action[:, 1:2]
+
+        frequency = self.frequency_min + 0.5 * (torch.tanh(raw_frequency) + 1.0) * (
+            self.frequency_max - self.frequency_min
+        )
+        bias = self.bias_max * torch.tanh(raw_bias)
+
+        cmd_vx = obs[:, 6:7]
+        positive = torch.ones_like(cmd_vx) * self.positive_vx_phase_sign
+        phase_sign = torch.where(
+            cmd_vx > self.command_deadband,
+            positive,
+            torch.where(cmd_vx < -self.command_deadband, -positive, torch.zeros_like(cmd_vx)),
+        )
+        spatial_phase_lag = self.phase_lag * phase_sign
+
+        next_phase = torch.remainder(self.phase + 2.0 * math.pi * frequency * self.policy_dt, 2.0 * math.pi)
+        self.phase[:] = next_phase[:1]
+
+        joint_action = bias + self.amplitude * torch.sin(next_phase + self.joint_index * spatial_phase_lag)
+        return joint_action / self.action_scale
+
+    @torch.jit.export
+    def reset(self):
+        self.phase[:] = 0.0
+
+
+def export_sine_gait_policy_as_jit(policy, normalizer, action_cfg, path: str, filename: str = "policy.pt") -> None:
+    exporter = SineGaitPolicyExporter(
+        policy=policy,
+        normalizer=normalizer,
+        amplitude=action_cfg.amplitude,
+        phase_lag=action_cfg.phase_lag,
+        action_scale=action_cfg.action_scale,
+        frequency_min=action_cfg.frequency_min,
+        frequency_max=action_cfg.frequency_max,
+        bias_max=action_cfg.bias_max,
+        policy_dt=0.02,
+        command_deadband=action_cfg.command_deadband,
+        positive_vx_phase_sign=action_cfg.positive_vx_phase_sign,
+        num_joints=len(action_cfg.joint_names),
+    )
+    os.makedirs(path, exist_ok=True)
+    exporter.to("cpu")
+    scripted = torch.jit.script(exporter)
+    scripted.save(os.path.join(path, filename))
