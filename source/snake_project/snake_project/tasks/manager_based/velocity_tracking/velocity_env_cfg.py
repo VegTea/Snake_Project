@@ -238,45 +238,45 @@ class SnakeVelocityRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.VirtualChassisTrackLinVelXYExp,
         weight=5.0,
-        params={"command_name": "base_velocity", "std": 0.4, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
+        params={"command_name": "base_velocity", "std": 0.2, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.VirtualChassisTrackAngVelZExp,
         weight=5.0,
-        params={"command_name": "base_velocity", "std": 0.4, "asset_cfg": virtual_chassis_body_cfg()},
+        params={"command_name": "base_velocity", "std": 0.2, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
     )
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
     joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
     raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
-    sine_wave_position = RewTerm(
-        func=mdp.sine_wave_position_tracking,
-        weight=4.0,
-        params={
-            "asset_cfg": yaw_joint_cfg(),
-            "amplitude": 0.20,
-            "frequency": 0.12,
-            "phase_lag": math.pi / 3.0,
-            "std": 0.20,
-            "command_name": "base_velocity",
-            "command_deadband": 0.03,
-            "positive_vx_phase_sign": -1.0,
-        },
-    )
-    sine_wave_velocity = RewTerm(
-        func=mdp.sine_wave_velocity_tracking,
-        weight=0.5,
-        params={
-            "asset_cfg": yaw_joint_cfg(),
-            "amplitude": 0.20,
-            "frequency": 0.12,
-            "phase_lag": math.pi / 3.0,
-            "std": 1.0,
-            "command_name": "base_velocity",
-            "command_deadband": 0.03,
-            "positive_vx_phase_sign": -1.0,
-        },
-    )
+    # sine_wave_position = RewTerm(
+    #     func=mdp.sine_wave_position_tracking,
+    #     weight=4.0,
+    #     params={
+    #         "asset_cfg": yaw_joint_cfg(),
+    #         "amplitude": 0.20,
+    #         "frequency": 0.12,
+    #         "phase_lag": math.pi / 3.0,
+    #         "std": 0.20,
+    #         "command_name": "base_velocity",
+    #         "command_deadband": 0.03,
+    #         "positive_vx_phase_sign": -1.0,
+    #     },
+    # )
+    # sine_wave_velocity = RewTerm(
+    #     func=mdp.sine_wave_velocity_tracking,
+    #     weight=0.5,
+    #     params={
+    #         "asset_cfg": yaw_joint_cfg(),
+    #         "amplitude": 0.20,
+    #         "frequency": 0.12,
+    #         "phase_lag": math.pi / 3.0,
+    #         "std": 1.0,
+    #         "command_name": "base_velocity",
+    #         "command_deadband": 0.03,
+    #         "positive_vx_phase_sign": -1.0,
+    #     },
+    # )
     joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.3, params={"asset_cfg": yaw_joint_cfg()})
     phase_propagation = RewTerm(
         func=mdp.phase_propagation,
@@ -317,28 +317,28 @@ class SnakeVelocityTerminationsCfg:
 class SnakeVelocityCurriculumCfg:
     """Curriculum hooks for the velocity-tracking task."""
 
-    reward_weights = CurrTerm(
-        func=mdp.reward_weight_stage_curriculum,
-        params={
-            "gait_iterations": 1000,
-            "transition_iterations": 1000,
-            "steps_per_iteration": 24,
-            "gait_weights": {
-                "track_lin_vel_xy_exp": 0.0,
-                "sine_wave_position": 5.0,
-                "sine_wave_velocity": 0.5,
-                "phase_propagation": 0.5,
-                "joint_amplitude": 0.3,
-            },
-            "velocity_weights": {
-                "track_lin_vel_xy_exp": 5.0,
-                "sine_wave_position": 0.0,
-                "sine_wave_velocity": 0.0,
-                "phase_propagation": 1.0,
-                "joint_amplitude": 0.3,
-            },
-        },
-    )
+    # reward_weights = CurrTerm(
+    #     func=mdp.reward_weight_stage_curriculum,
+    #     params={
+    #         "gait_iterations": 1000,
+    #         "transition_iterations": 1000,
+    #         "steps_per_iteration": 24,
+    #         "gait_weights": {
+    #             "track_lin_vel_xy_exp": 0.0,
+    #             "sine_wave_position": 5.0,
+    #             "sine_wave_velocity": 0.5,
+    #             "phase_propagation": 0.5,
+    #             "joint_amplitude": 0.3,
+    #         },
+    #         "velocity_weights": {
+    #             "track_lin_vel_xy_exp": 5.0,
+    #             "sine_wave_position": 0.0,
+    #             "sine_wave_velocity": 0.0,
+    #             "phase_propagation": 1.0,
+    #             "joint_amplitude": 0.3,
+    #         },
+    #     },
+    # )
 
     # command = CurrTerm(
     #     func=mdp.command_velocity_curriculum,

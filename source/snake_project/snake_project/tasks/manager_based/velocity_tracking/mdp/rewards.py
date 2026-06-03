@@ -284,6 +284,7 @@ class VirtualChassisTrackAngVelZExp(ManagerTermBase):
         command_name: str,
         std: float,
         asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+        linear_coef: float = 0.0,
     ) -> torch.Tensor:
         body_pos_w = self.asset.data.body_pos_w[:, self.asset_cfg.body_ids, :]
         body_lin_vel_w = self.asset.data.body_lin_vel_w[:, self.asset_cfg.body_ids, :]
@@ -307,7 +308,9 @@ class VirtualChassisTrackAngVelZExp(ManagerTermBase):
         self.has_prev_axes[:] = True
 
         ang_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 2] - actual_ang_vel_z_vc)
-        return torch.exp(-ang_vel_error / std**2)
+        exp_reward = torch.exp(-ang_vel_error / std**2)
+        lin_penalty = linear_coef * torch.sqrt(ang_vel_error)
+        return exp_reward - lin_penalty
 
 
 def contact_penalty(
