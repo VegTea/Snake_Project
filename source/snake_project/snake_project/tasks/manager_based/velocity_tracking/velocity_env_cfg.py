@@ -280,7 +280,7 @@ class SnakeVelocityRewardsCfg:
     joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.3, params={"asset_cfg": yaw_joint_cfg()})
     phase_propagation = RewTerm(
         func=mdp.phase_propagation,
-        weight=0.0,
+        weight=1.0,
         params={
             "asset_cfg": yaw_joint_cfg(),
             "target_phase_lag": math.pi / 3.0,
