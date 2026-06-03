@@ -1,7 +1,7 @@
 LOG_DIR=$1 
 export MUJOCO_GL=egl 
 python sim2sim/sim2sim_mujoco.py \
-    --cmd_vx 0.3 \
+    --cmd_vx 0.2 \
     --cmd_vy 0.0 \
     --headless 1 \
     --record_video 1 \

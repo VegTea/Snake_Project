@@ -62,3 +62,54 @@ def command_velocity_curriculum(
         "lin_vel_y_min": y_min, "lin_vel_y_max": y_max,
         "mean_tracking_reward": ema,
     }
+
+
+def reward_weight_stage_curriculum(
+    env: "ManagerBasedRLEnv",
+    env_ids,
+    gait_steps: int = 2400,
+    transition_steps: int = 4800,
+    gait_weights: dict[str, float] | None = None,
+    velocity_weights: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """Schedule reward weights from gait formation to velocity tracking.
+
+    The schedule uses ``env.common_step_counter``.  With the default RSL-RL
+    runner setting ``num_steps_per_env=24``, ``gait_steps=2400`` corresponds to
+    roughly 100 PPO iterations and ``transition_steps=4800`` to another 200
+    iterations.
+    """
+    if gait_weights is None:
+        gait_weights = {
+            "track_lin_vel_xy_exp": 2.0,
+            "phase_propagation": 1.0,
+            "joint_amplitude": 0.3,
+        }
+    if velocity_weights is None:
+        velocity_weights = {
+            "track_lin_vel_xy_exp": 5.0,
+            "phase_propagation": 0.4,
+            "joint_amplitude": 0.2,
+        }
+
+    step = int(env.common_step_counter)
+    if step <= gait_steps:
+        alpha = 0.0
+    elif transition_steps <= 0:
+        alpha = 1.0
+    else:
+        alpha = min(max((step - gait_steps) / transition_steps, 0.0), 1.0)
+
+    updated_weights = {"alpha": alpha, "step": float(step)}
+    for term_name, gait_weight in gait_weights.items():
+        if term_name not in velocity_weights:
+            continue
+        velocity_weight = velocity_weights[term_name]
+        weight = (1.0 - alpha) * gait_weight + alpha * velocity_weight
+        term_cfg = env.reward_manager.get_term_cfg(term_name)
+        if term_cfg.weight != weight:
+            term_cfg.weight = weight
+            env.reward_manager.set_term_cfg(term_name, term_cfg)
+        updated_weights[term_name] = weight
+
+    return updated_weights

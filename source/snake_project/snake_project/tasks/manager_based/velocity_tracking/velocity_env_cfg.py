@@ -237,7 +237,7 @@ class SnakeVelocityRewardsCfg:
 
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.VirtualChassisTrackLinVelXYExp,
-        weight=5.0,
+        weight=2.0,
         params={"command_name": "base_velocity", "std": 0.4, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
     )
     track_ang_vel_z_exp = RewTerm(
@@ -249,7 +249,7 @@ class SnakeVelocityRewardsCfg:
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
     joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
     raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
-    joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.2, params={"asset_cfg": yaw_joint_cfg()})
+    joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.3, params={"asset_cfg": yaw_joint_cfg()})
     phase_propagation = RewTerm(
         func=mdp.phase_propagation,
         weight=1.0,
@@ -288,6 +288,24 @@ class SnakeVelocityTerminationsCfg:
 @configclass
 class SnakeVelocityCurriculumCfg:
     """Curriculum hooks for the velocity-tracking task."""
+
+    reward_weights = CurrTerm(
+        func=mdp.reward_weight_stage_curriculum,
+        params={
+            "gait_steps": 5000,
+            "transition_steps": 3000,
+            "gait_weights": {
+                "track_lin_vel_xy_exp": 0.0,
+                "phase_propagation": 3.0,
+                "joint_amplitude": 0.3,
+            },
+            "velocity_weights": {
+                "track_lin_vel_xy_exp": 5.0,
+                "phase_propagation": 0.4,
+                "joint_amplitude": 0.2,
+            },
+        },
+    )
 
     # command = CurrTerm(
     #     func=mdp.command_velocity_curriculum,
