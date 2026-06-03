@@ -31,6 +31,8 @@ docker/.container.cfg
 !.vscode
 
 # Outputs
+sim2sim/eval_output_gait_wrapper_smoke
+sim2sim/eval_output_sine_controller
 **/output/*
 **/outputs/*
 **/videos/*

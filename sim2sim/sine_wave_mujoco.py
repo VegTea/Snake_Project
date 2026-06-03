@@ -28,6 +28,57 @@ def wrap_to_pi(value: float) -> float:
     return (value + math.pi) % (2.0 * math.pi) - math.pi
 
 
+def parse_bias_schedule(schedule: str) -> tuple[tuple[float, float], ...]:
+    entries: list[tuple[float, float]] = []
+    if not schedule:
+        return tuple(entries)
+
+    for raw_entry in schedule.split(","):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        try:
+            time_s, bias = entry.split(":", maxsplit=1)
+            time_s_f = float(time_s)
+            bias_f = float(bias)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(
+                f"Invalid bias schedule entry '{entry}'. Use comma-separated time:bias pairs, e.g. 0:0.1,3:0.0."
+            ) from exc
+        if time_s_f < 0.0:
+            raise argparse.ArgumentTypeError(f"Bias schedule time must be non-negative, got {time_s_f}.")
+        entries.append((time_s_f, bias_f))
+
+    entries.sort(key=lambda item: item[0])
+    return tuple(entries)
+
+
+def scheduled_bias(sim_t: float, default_bias: float, schedule: tuple[tuple[float, float], ...]) -> float:
+    current = float(default_bias)
+    for start_s, bias in schedule:
+        if sim_t + 1.0e-9 < start_s:
+            break
+        current = float(bias)
+    return current
+
+
+def command_theta_body(cmd_vx: float, cmd_vy: float, mode: str) -> float:
+    cmd_vel = float(math.hypot(cmd_vx, cmd_vy))
+    if cmd_vel <= 1.0e-6:
+        return 0.0
+    if mode == "body_lateral":
+        return float(math.atan2(cmd_vy, abs(cmd_vx)))
+    if mode == "velocity_vector":
+        return float(math.atan2(cmd_vy, cmd_vx))
+    raise ValueError(f"Unsupported heading command mode: {mode}")
+
+
+def heading_gain_sign(cmd_vx: float, theta_source: str, theta_deadband_speed: float, reverse_heading_gain: bool) -> float:
+    if reverse_heading_gain and theta_source == "heading" and cmd_vx < -theta_deadband_speed:
+        return -1.0
+    return 1.0
+
+
 @dataclass
 class SineWaveCfg:
     base_body_name: str = "base_link"
@@ -51,6 +102,16 @@ class SineWaveCfg:
     )
     action_scale: float = 0.25
     default_joint_angles: Tuple[float, ...] = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+
+@dataclass
+class VirtualChassisState:
+    origin_w: np.ndarray
+    lin_vel_vc: np.ndarray
+    ang_vel_vc: np.ndarray
+    lin_vel_w: np.ndarray
+    axes_w: np.ndarray
+    heading_theta_w: float
 
 
 class MujocoSineWaveRunner:
@@ -113,8 +174,10 @@ class MujocoSineWaveRunner:
         self._last_cmd_vy = 0.0
         self._last_cmd_vel = 0.0
         self._last_cmd_theta = 0.0
+        self._last_cmd_theta_body = 0.0
         self._last_bias = 0.0
         self._last_frequency = 0.0
+        self._theta_source = "vc_velocity"
         if self.record_video:
             self.renderer = mujoco.Renderer(self.model, height=480, width=640)
             print(f"[Runner] Video recording enabled, output: {self.video_path}")
@@ -174,8 +237,10 @@ class MujocoSineWaveRunner:
         self._last_cmd_vy = 0.0
         self._last_cmd_vel = 0.0
         self._last_cmd_theta = 0.0
+        self._last_cmd_theta_body = 0.0
         self._last_bias = 0.0
         self._last_frequency = 0.0
+        self._theta_source = "vc_velocity"
         mujoco.mj_forward(self.model, self.data)
 
     def _apply_joint_targets(self, q_target: np.ndarray) -> None:
@@ -196,7 +261,7 @@ class MujocoSineWaveRunner:
             cam.up[:] = up
         self._video_frames.append(self.renderer.render())
 
-    def _compute_virtual_chassis_state(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    def _compute_virtual_chassis_state(self) -> VirtualChassisState:
         body_pos_w = np.array(self.data.xpos[self.vc_body_ids], dtype=np.float64)
         body_com_w = np.array(self.data.xipos[self.vc_body_ids], dtype=np.float64)
         body_cvel = np.array(self.data.cvel[self.vc_body_ids], dtype=np.float64)
@@ -226,17 +291,41 @@ class MujocoSineWaveRunner:
         vc_ang_vel_w = body_ang_vel_w.mean(axis=0)
         lin_vel_vc = axes_w.T @ vc_lin_vel_w
         ang_vel_vc = axes_w.T @ vc_ang_vel_w
+        heading_theta_w = float(math.atan2(axes_w[1, 0], axes_w[0, 0]))
 
         self.prev_vc_axes_w = axes_w
         self.has_prev_vc_axes = True
-        return origin_w, lin_vel_vc, ang_vel_vc, float(ang_vel_vc[2])
+        return VirtualChassisState(
+            origin_w=origin_w,
+            lin_vel_vc=lin_vel_vc,
+            ang_vel_vc=ang_vel_vc,
+            lin_vel_w=vc_lin_vel_w,
+            axes_w=axes_w,
+            heading_theta_w=heading_theta_w,
+        )
+
+    @staticmethod
+    def _theta_from_state(state: VirtualChassisState, theta_source: str, deadband_speed: float = 1.0e-6) -> float:
+        if theta_source == "heading":
+            return state.heading_theta_w
+
+        vc_vel = float(np.linalg.norm(state.lin_vel_vc[:2]))
+        if vc_vel < deadband_speed:
+            return 0.0
+        return float(math.atan2(state.lin_vel_vc[1], state.lin_vel_vc[0]))
 
     def _log_step(self, sim_t: float) -> None:
-        origin_w, lin_vel_vc, _, ang_vel_z_vc = self._compute_virtual_chassis_state()
+        state = self._compute_virtual_chassis_state()
+        origin_w = state.origin_w
+        lin_vel_vc = state.lin_vel_vc
+        ang_vel_z_vc = float(state.ang_vel_vc[2])
         base_pos_w = np.array(self.data.xpos[self.base_body_id], dtype=np.float64)
         base_vel_w = np.array(self.data.qvel[0:3], dtype=np.float64)
         vc_vel = float(np.linalg.norm(lin_vel_vc[:2]))
         vc_theta = float(math.atan2(lin_vel_vc[1], lin_vel_vc[0])) if vc_vel > 1.0e-6 else 0.0
+        world_vel = float(np.linalg.norm(state.lin_vel_w[:2]))
+        world_vel_theta = float(math.atan2(state.lin_vel_w[1], state.lin_vel_w[0])) if world_vel > 1.0e-6 else 0.0
+        theta_feedback = self._theta_from_state(state, self._theta_source)
         self._log_rows.append(
             {
                 "time": float(sim_t),
@@ -244,12 +333,19 @@ class MujocoSineWaveRunner:
                 "cmd_vy": float(self._last_cmd_vy),
                 "cmd_vel": float(self._last_cmd_vel),
                 "cmd_theta": float(self._last_cmd_theta),
+                "cmd_theta_body": float(self._last_cmd_theta_body),
+                "theta_feedback": float(theta_feedback),
+                "theta_source": self._theta_source,
                 "vc_x": float(origin_w[0]),
                 "vc_y": float(origin_w[1]),
                 "vc_vx": float(lin_vel_vc[0]),
                 "vc_vy": float(lin_vel_vc[1]),
                 "vc_vel": float(vc_vel),
                 "vc_theta": float(vc_theta),
+                "vc_heading_theta_w": float(state.heading_theta_w),
+                "world_vel_theta": float(world_vel_theta),
+                "world_vx": float(state.lin_vel_w[0]),
+                "world_vy": float(state.lin_vel_w[1]),
                 "vc_wz": float(ang_vel_z_vc),
                 "bias": float(self._last_bias),
                 "frequency": float(self._last_frequency),
@@ -270,6 +366,7 @@ class MujocoSineWaveRunner:
         auto_phase_lag: bool,
         positive_vx_phase_sign: float,
         bias: float,
+        bias_schedule: tuple[tuple[float, float], ...],
         controller: bool,
         cmd_vx: float,
         cmd_vy: float,
@@ -277,8 +374,11 @@ class MujocoSineWaveRunner:
         controller_start: float,
         theta_kp: float,
         theta_kd: float,
+        heading_command_mode: str,
+        reverse_heading_gain: bool,
         speed_kp: float,
         speed_kd: float,
+        theta_source: str,
         min_frequency: float,
         max_frequency: float,
         max_bias: float,
@@ -307,13 +407,13 @@ class MujocoSineWaveRunner:
         t0 = time.time()
         sim_t = 0.0
         oscillator_phase = 0.0
-        current_bias = float(bias)
+        current_bias = scheduled_bias(0.0, float(bias), bias_schedule)
         current_frequency = float(frequency)
         prev_theta_error = 0.0
         prev_speed_error = 0.0
         filtered_theta_error = 0.0
         cmd_vel = float(math.hypot(cmd_vx, cmd_vy))
-        cmd_theta = float(math.atan2(cmd_vy, cmd_vx)) if cmd_vel > 1.0e-6 else 0.0
+        cmd_theta_body = command_theta_body(cmd_vx, cmd_vy, heading_command_mode)
         base_phase_lag = abs(float(phase_lag))
         current_phase_lag = float(phase_lag)
         if auto_phase_lag:
@@ -326,27 +426,41 @@ class MujocoSineWaveRunner:
         self._last_cmd_vx = float(cmd_vx)
         self._last_cmd_vy = float(cmd_vy)
         self._last_cmd_vel = cmd_vel
-        self._last_cmd_theta = cmd_theta
+        self._last_cmd_theta_body = cmd_theta_body
         self._last_bias = current_bias
         self._last_frequency = current_frequency
+        self._theta_source = theta_source
+
+        initial_state = self._compute_virtual_chassis_state()
+        if theta_source == "heading":
+            cmd_theta = wrap_to_pi(initial_state.heading_theta_w + cmd_theta_body)
+        else:
+            cmd_theta = cmd_theta_body
+        self._last_cmd_theta = cmd_theta
 
         print(
             f"[Sine] amplitude={amplitude:.3f} rad, frequency={frequency:.3f} Hz, "
-            f"phase_lag={current_phase_lag:+.6f} rad, bias={bias:+.3f} rad"
+            f"phase_lag={current_phase_lag:+.6f} rad, bias={current_bias:+.3f} rad"
         )
+        if bias_schedule:
+            print(f"[Sine] bias_schedule={list(bias_schedule)}")
         if controller:
             print(
                 f"[Controller] cmd_vx={cmd_vx:+.3f}, cmd_vy={cmd_vy:+.3f}, "
-                f"cmd_vel={cmd_vel:.3f}, cmd_theta={cmd_theta:+.3f}"
+                f"cmd_vel={cmd_vel:.3f}, cmd_theta={cmd_theta:+.3f}, theta_source={theta_source}"
             )
 
         for step in range(steps):
-            if controller and sim_t >= controller_start and step % control_interval == 0:
-                _, lin_vel_vc, _, _ = self._compute_virtual_chassis_state()
-                vc_vel = float(np.linalg.norm(lin_vel_vc[:2]))
-                vc_theta = float(math.atan2(lin_vel_vc[1], lin_vel_vc[0])) if vc_vel >= theta_deadband_speed else 0.0
+            if bias_schedule and not controller:
+                current_bias = scheduled_bias(sim_t, float(bias), bias_schedule)
 
-                theta_error = wrap_to_pi(cmd_theta - vc_theta) if cmd_vel >= theta_deadband_speed else 0.0
+            if controller and sim_t >= controller_start and step % control_interval == 0:
+                state = self._compute_virtual_chassis_state()
+                lin_vel_vc = state.lin_vel_vc
+                vc_vel = float(np.linalg.norm(lin_vel_vc[:2]))
+                theta_feedback = self._theta_from_state(state, theta_source, theta_deadband_speed)
+
+                theta_error = wrap_to_pi(cmd_theta - theta_feedback) if cmd_vel >= theta_deadband_speed else 0.0
                 speed_error = cmd_vel - vc_vel
                 if theta_filter_tau > 0.0:
                     alpha = control_dt / (theta_filter_tau + control_dt)
@@ -361,7 +475,9 @@ class MujocoSineWaveRunner:
                 prev_speed_error = speed_error
 
                 gate = np.clip((vc_vel - theta_deadband_speed) / max(theta_speed_gate - theta_deadband_speed, 1.0e-6), 0.0, 1.0)
-                bias_target = gate * (theta_kp * filtered_theta_error + theta_kd * theta_derivative)
+                bias_target = heading_gain_sign(
+                    cmd_vx, theta_source, theta_deadband_speed, reverse_heading_gain
+                ) * gate * (theta_kp * filtered_theta_error + theta_kd * theta_derivative)
                 bias_target = float(np.clip(bias_target, -max_bias, max_bias))
                 max_delta_bias = max_bias_rate * control_dt
                 current_bias += float(np.clip(bias_target - current_bias, -max_delta_bias, max_delta_bias))
@@ -477,18 +593,20 @@ class MujocoSineWaveRunner:
         t = np.array([row["time"] for row in self._log_rows], dtype=np.float64)
         cmd_vx = np.array([row["cmd_vx"] for row in self._log_rows], dtype=np.float64)
         cmd_vy = np.array([row["cmd_vy"] for row in self._log_rows], dtype=np.float64)
-        vc_vx = np.array([row["vc_vx"] for row in self._log_rows], dtype=np.float64)
-        vc_vy = np.array([row["vc_vy"] for row in self._log_rows], dtype=np.float64)
+        vx_key = "world_vx" if "world_vx" in self._log_rows[0] else "vc_vx"
+        vy_key = "world_vy" if "world_vy" in self._log_rows[0] else "vc_vy"
+        actual_vx = np.array([row[vx_key] for row in self._log_rows], dtype=np.float64)
+        actual_vy = np.array([row[vy_key] for row in self._log_rows], dtype=np.float64)
 
         fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
         axes[0].plot(t, cmd_vx, label="cmd_vx", linewidth=1.8)
-        axes[0].plot(t, vc_vx, label="vc_vx", linewidth=1.2)
+        axes[0].plot(t, actual_vx, label=vx_key, linewidth=1.2)
         axes[0].set_ylabel("vx (m/s)")
         axes[0].grid(True, alpha=0.3)
         axes[0].legend(loc="best")
 
         axes[1].plot(t, cmd_vy, label="cmd_vy", linewidth=1.8)
-        axes[1].plot(t, vc_vy, label="vc_vy", linewidth=1.2)
+        axes[1].plot(t, actual_vy, label=vy_key, linewidth=1.2)
         axes[1].set_ylabel("vy (m/s)")
         axes[1].set_xlabel("time (s)")
         axes[1].grid(True, alpha=0.3)
@@ -509,12 +627,16 @@ class MujocoSineWaveRunner:
         os.makedirs(os.path.dirname(plot_path) or ".", exist_ok=True)
         t = np.array([row["time"] for row in self._log_rows], dtype=np.float64)
         cmd_theta = np.array([row["cmd_theta"] for row in self._log_rows], dtype=np.float64)
-        vc_theta = np.array([row["vc_theta"] for row in self._log_rows], dtype=np.float64)
-        theta_error = np.array([wrap_to_pi(cmd - actual) for cmd, actual in zip(cmd_theta, vc_theta)], dtype=np.float64)
+        feedback_key = "theta_feedback" if "theta_feedback" in self._log_rows[0] else "vc_theta"
+        theta_feedback = np.array([row[feedback_key] for row in self._log_rows], dtype=np.float64)
+        theta_error = np.array(
+            [wrap_to_pi(cmd - actual) for cmd, actual in zip(cmd_theta, theta_feedback)], dtype=np.float64
+        )
+        theta_feedback_plot = cmd_theta - theta_error
 
         fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
         axes[0].plot(t, cmd_theta, label="cmd_theta", linewidth=1.8)
-        axes[0].plot(t, vc_theta, label="vc_theta", linewidth=1.2)
+        axes[0].plot(t, theta_feedback_plot, label=feedback_key, linewidth=1.2)
         axes[0].set_ylabel("theta (rad)")
         axes[0].grid(True, alpha=0.3)
         axes[0].legend(loc="best")
@@ -553,6 +675,12 @@ def parse_args() -> argparse.Namespace:
         help="Phase-lag sign used when cmd_vx is positive and --auto_phase_lag=1.",
     )
     parser.add_argument("--bias", type=float, default=0.0, help="Constant yaw offset added to all controlled joints.")
+    parser.add_argument(
+        "--bias_schedule",
+        type=parse_bias_schedule,
+        default=tuple(),
+        help="Optional comma-separated open-loop bias schedule as time:bias pairs, e.g. 0:0.1,3:0.0.",
+    )
     parser.add_argument("--controller", type=int, default=0, help="1=closed-loop polar velocity controller, 0=open-loop.")
     parser.add_argument("--cmd_vx", type=float, default=0.2, help="Velocity command x in virtual-chassis frame.")
     parser.add_argument("--cmd_vy", type=float, default=0.0, help="Velocity command y in virtual-chassis frame.")
@@ -560,8 +688,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--controller_start", type=float, default=0.5, help="Seconds to run open-loop before enabling control.")
     parser.add_argument("--theta_kp", type=float, default=0.4, help="Direction P gain: theta error -> bias.")
     parser.add_argument("--theta_kd", type=float, default=0.0, help="Direction D gain: theta error derivative -> bias.")
+    parser.add_argument(
+        "--heading_command_mode",
+        type=str,
+        choices=("body_lateral", "velocity_vector"),
+        default="body_lateral",
+        help=(
+            "How heading mode maps (cmd_vx, cmd_vy) to heading offset. "
+            "body_lateral treats negative vx as reverse motion without a 180-degree heading target."
+        ),
+    )
+    parser.add_argument(
+        "--reverse_heading_gain",
+        type=int,
+        default=1,
+        help="Flip heading-control gain when cmd_vx is negative, preventing reverse commands from over-turning.",
+    )
     parser.add_argument("--speed_kp", type=float, default=1.0, help="Speed P gain: speed error -> frequency.")
     parser.add_argument("--speed_kd", type=float, default=0.0, help="Speed D gain: speed error derivative -> frequency.")
+    parser.add_argument(
+        "--theta_source",
+        type=str,
+        choices=("vc_velocity", "heading"),
+        default="vc_velocity",
+        help="Theta feedback source: vc_velocity uses body-frame velocity angle, heading uses world-frame virtual-chassis heading.",
+    )
     parser.add_argument("--min_frequency", type=float, default=0.0, help="Minimum controller frequency in Hz.")
     parser.add_argument("--max_frequency", type=float, default=2.0, help="Maximum controller frequency in Hz.")
     parser.add_argument("--max_bias", type=float, default=0.35, help="Maximum absolute controller bias in radians.")
@@ -605,6 +756,7 @@ def main() -> None:
         auto_phase_lag=bool(args.auto_phase_lag),
         positive_vx_phase_sign=float(args.positive_vx_phase_sign),
         bias=float(args.bias),
+        bias_schedule=tuple(args.bias_schedule),
         controller=bool(args.controller),
         cmd_vx=float(args.cmd_vx),
         cmd_vy=float(args.cmd_vy),
@@ -612,8 +764,11 @@ def main() -> None:
         controller_start=float(args.controller_start),
         theta_kp=float(args.theta_kp),
         theta_kd=float(args.theta_kd),
+        heading_command_mode=str(args.heading_command_mode),
+        reverse_heading_gain=bool(args.reverse_heading_gain),
         speed_kp=float(args.speed_kp),
         speed_kd=float(args.speed_kd),
+        theta_source=str(args.theta_source),
         min_frequency=float(args.min_frequency),
         max_frequency=float(args.max_frequency),
         max_bias=float(args.max_bias),

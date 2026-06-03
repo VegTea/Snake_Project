@@ -1,7 +1,7 @@
 export MUJOCO_GL=egl
 python sim2sim/sine_wave_mujoco.py \
     --controller 1 \
-    --cmd_vx 0.2 \
+    --cmd_vx -0.2 \
     --cmd_vy 0.1 \
     --phase_lag 1.0471975512 \
     --auto_phase_lag 1 \
@@ -9,15 +9,16 @@ python sim2sim/sine_wave_mujoco.py \
     --amplitude 0.20 \
     --frequency 0.12 \
     --controller_start 0.5 \
-    --theta_kp 0.02 \
+    --theta_kp 0.2 \
     --theta_kd 0.0 \
     --speed_kp 20 \
     --speed_kd 0.0 \
+    --theta_source heading \
     --max_frequency 2.0 \
     --max_bias 0.35 \
     --max_bias_rate 0.15 \
     --theta_speed_gate 0.15 \
-    --theta_filter_tau 0.5 \
+    --theta_filter_tau 0.4 \
     --headless 1 \
     --record_video 1 \
     --video_path sim2sim/videos/sine_controller.mp4 \
@@ -25,4 +26,4 @@ python sim2sim/sine_wave_mujoco.py \
     --plot_path sim2sim/videos/sine_controller_velocity_tracking.png \
     --theta_plot_path sim2sim/videos/sine_controller_theta_tracking.png \
     --log_warmup 2.0 \
-    --seconds 10.0
+    --seconds 15.0
