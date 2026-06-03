@@ -79,6 +79,96 @@ def phase_propagation(
     return torch.mean(torch.cos(phase_error), dim=1)
 
 
+def _target_sine_wave(
+    env: "ManagerBasedRLEnv",
+    num_joints: int,
+    amplitude: float,
+    frequency: float,
+    phase_lag: float,
+    command_name: str | None,
+    command_deadband: float,
+    positive_vx_phase_sign: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    time = env.episode_length_buf.to(dtype=torch.float32).unsqueeze(1) * env.step_dt
+    joint_index = torch.arange(num_joints, device=env.device, dtype=torch.float32).unsqueeze(0)
+    spatial_phase_lag = torch.full(
+        (env.num_envs, 1),
+        abs(float(phase_lag)),
+        device=env.device,
+        dtype=torch.float32,
+    )
+    if command_name is not None:
+        command_vx = env.command_manager.get_command(command_name)[:, 0:1]
+        phase_sign = torch.where(
+            command_vx >= command_deadband,
+            positive_vx_phase_sign,
+            torch.where(command_vx <= -command_deadband, -positive_vx_phase_sign, 0.0),
+        )
+        spatial_phase_lag = spatial_phase_lag * phase_sign
+
+    omega = 2.0 * torch.pi * float(frequency)
+    phase = omega * time + joint_index * spatial_phase_lag
+    target_pos = float(amplitude) * torch.sin(phase)
+    target_vel = float(amplitude) * omega * torch.cos(phase)
+    return target_pos, target_vel
+
+
+def sine_wave_position_tracking(
+    env: "ManagerBasedRLEnv",
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    amplitude: float = 0.20,
+    frequency: float = 0.8,
+    phase_lag: float = torch.pi / 3.0,
+    std: float = 0.20,
+    command_name: str | None = None,
+    command_deadband: float = 0.03,
+    positive_vx_phase_sign: float = 1.0,
+) -> torch.Tensor:
+    """Reward matching a commanded open-loop sine-wave joint-position template."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    joint_pos = asset.data.joint_pos[:, asset_cfg.joint_ids]
+    target_pos, _ = _target_sine_wave(
+        env,
+        joint_pos.shape[1],
+        amplitude,
+        frequency,
+        phase_lag,
+        command_name,
+        command_deadband,
+        positive_vx_phase_sign,
+    )
+    pos_error = torch.mean(torch.square(joint_pos - target_pos), dim=1)
+    return torch.exp(-pos_error / (std**2))
+
+
+def sine_wave_velocity_tracking(
+    env: "ManagerBasedRLEnv",
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    amplitude: float = 0.20,
+    frequency: float = 0.8,
+    phase_lag: float = torch.pi / 3.0,
+    std: float = 1.0,
+    command_name: str | None = None,
+    command_deadband: float = 0.03,
+    positive_vx_phase_sign: float = 1.0,
+) -> torch.Tensor:
+    """Reward matching the velocity of a commanded open-loop sine-wave template."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    joint_vel = asset.data.joint_vel[:, asset_cfg.joint_ids]
+    _, target_vel = _target_sine_wave(
+        env,
+        joint_vel.shape[1],
+        amplitude,
+        frequency,
+        phase_lag,
+        command_name,
+        command_deadband,
+        positive_vx_phase_sign,
+    )
+    vel_error = torch.mean(torch.square(joint_vel - target_vel), dim=1)
+    return torch.exp(-vel_error / (std**2))
+
+
 class RawActionRatePenalty(ManagerTermBase):
     """L2 penalty on the first-order raw action-rate."""
 

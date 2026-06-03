@@ -81,13 +81,17 @@ def reward_weight_stage_curriculum(
     """
     if gait_weights is None:
         gait_weights = {
-            "track_lin_vel_xy_exp": 2.0,
-            "phase_propagation": 1.0,
+            "track_lin_vel_xy_exp": 0.0,
+            "sine_wave_position": 2.0,
+            "sine_wave_velocity": 0.5,
+            "phase_propagation": 3.0,
             "joint_amplitude": 0.3,
         }
     if velocity_weights is None:
         velocity_weights = {
             "track_lin_vel_xy_exp": 5.0,
+            "sine_wave_position": 0.0,
+            "sine_wave_velocity": 0.0,
             "phase_propagation": 0.4,
             "joint_amplitude": 0.2,
         }

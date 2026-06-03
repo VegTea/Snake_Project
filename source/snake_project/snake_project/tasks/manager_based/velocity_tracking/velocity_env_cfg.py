@@ -249,10 +249,38 @@ class SnakeVelocityRewardsCfg:
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
     joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
     raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
+    sine_wave_position = RewTerm(
+        func=mdp.sine_wave_position_tracking,
+        weight=4.0,
+        params={
+            "asset_cfg": yaw_joint_cfg(),
+            "amplitude": 0.20,
+            "frequency": 0.12,
+            "phase_lag": math.pi / 3.0,
+            "std": 0.20,
+            "command_name": "base_velocity",
+            "command_deadband": 0.03,
+            "positive_vx_phase_sign": -1.0,
+        },
+    )
+    sine_wave_velocity = RewTerm(
+        func=mdp.sine_wave_velocity_tracking,
+        weight=0.5,
+        params={
+            "asset_cfg": yaw_joint_cfg(),
+            "amplitude": 0.20,
+            "frequency": 0.12,
+            "phase_lag": math.pi / 3.0,
+            "std": 1.0,
+            "command_name": "base_velocity",
+            "command_deadband": 0.03,
+            "positive_vx_phase_sign": -1.0,
+        },
+    )
     joint_amplitude = RewTerm(func=mdp.joint_amplitude, weight=0.3, params={"asset_cfg": yaw_joint_cfg()})
     phase_propagation = RewTerm(
         func=mdp.phase_propagation,
-        weight=1.0,
+        weight=0.0,
         params={
             "asset_cfg": yaw_joint_cfg(),
             "target_phase_lag": math.pi / 3.0,
@@ -272,9 +300,9 @@ class SnakeVelocityRewardsCfg:
 class SnakeVelocityTerminationsCfg:
     """Termination conditions for the velocity-tracking task."""
 
-    time_out = DoneTerm(func=mdp.time_out, time_out=True)
+    time_out = DoneTerm(func = mdp.time_out, time_out = True)
     invalid_state = DoneTerm(
-        func=mdp.invalid_state,
+        func = mdp.invalid_state,
         params={
             "asset_cfg": SceneEntityCfg("robot"),
             "max_root_lin_vel": 2.0,
@@ -296,11 +324,15 @@ class SnakeVelocityCurriculumCfg:
             "transition_steps": 3000,
             "gait_weights": {
                 "track_lin_vel_xy_exp": 0.0,
+                "sine_wave_position": 4.0,
+                "sine_wave_velocity": 0.5,
                 "phase_propagation": 3.0,
                 "joint_amplitude": 0.3,
             },
             "velocity_weights": {
                 "track_lin_vel_xy_exp": 5.0,
+                "sine_wave_position": 0.0,
+                "sine_wave_velocity": 0.0,
                 "phase_propagation": 0.4,
                 "joint_amplitude": 0.2,
             },
