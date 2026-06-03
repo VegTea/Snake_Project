@@ -69,15 +69,17 @@ def reward_weight_stage_curriculum(
     env_ids,
     gait_steps: int = 2400,
     transition_steps: int = 4800,
+    gait_iterations: int | None = None,
+    transition_iterations: int | None = None,
+    steps_per_iteration: int = 24,
     gait_weights: dict[str, float] | None = None,
     velocity_weights: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """Schedule reward weights from gait formation to velocity tracking.
 
-    The schedule uses ``env.common_step_counter``.  With the default RSL-RL
-    runner setting ``num_steps_per_env=24``, ``gait_steps=2400`` corresponds to
-    roughly 100 PPO iterations and ``transition_steps=4800`` to another 200
-    iterations.
+    When ``gait_iterations`` and ``transition_iterations`` are provided, the
+    schedule is expressed in PPO iterations by converting ``env.common_step_counter``
+    with ``steps_per_iteration``.  Otherwise it falls back to environment steps.
     """
     if gait_weights is None:
         gait_weights = {
@@ -97,14 +99,25 @@ def reward_weight_stage_curriculum(
         }
 
     step = int(env.common_step_counter)
-    if step <= gait_steps:
+    if gait_iterations is not None:
+        progress = step / max(int(steps_per_iteration), 1)
+        gait_duration = float(gait_iterations)
+        transition_duration = float(transition_iterations or 0)
+        progress_key = "iteration"
+    else:
+        progress = float(step)
+        gait_duration = float(gait_steps)
+        transition_duration = float(transition_steps)
+        progress_key = "step"
+
+    if progress <= gait_duration:
         alpha = 0.0
-    elif transition_steps <= 0:
+    elif transition_duration <= 0:
         alpha = 1.0
     else:
-        alpha = min(max((step - gait_steps) / transition_steps, 0.0), 1.0)
+        alpha = min(max((progress - gait_duration) / transition_duration, 0.0), 1.0)
 
-    updated_weights = {"alpha": alpha, "step": float(step)}
+    updated_weights = {"alpha": alpha, "step": float(step), progress_key: float(progress)}
     for term_name, gait_weight in gait_weights.items():
         if term_name not in velocity_weights:
             continue

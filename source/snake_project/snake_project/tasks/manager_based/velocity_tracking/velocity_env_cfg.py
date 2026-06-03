@@ -320,8 +320,9 @@ class SnakeVelocityCurriculumCfg:
     reward_weights = CurrTerm(
         func=mdp.reward_weight_stage_curriculum,
         params={
-            "gait_steps": 5000,
-            "transition_steps": 3000,
+            "gait_iterations": 1000,
+            "transition_iterations": 1000,
+            "steps_per_iteration": 24,
             "gait_weights": {
                 "track_lin_vel_xy_exp": 0.0,
                 "sine_wave_position": 4.0,

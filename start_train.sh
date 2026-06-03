@@ -1,3 +1,5 @@
+export PYTHONPATH="$(pwd)/source/snake_project:${PYTHONPATH}"
+
 python scripts/rsl_rl/train.py \
     --task Snake-VelocityTracking-Flat-v0 \
     --num_envs 4096 \
