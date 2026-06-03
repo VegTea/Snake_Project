@@ -237,13 +237,13 @@ class SnakeVelocityRewardsCfg:
 
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.VirtualChassisTrackLinVelXYExp,
-        weight=5.0,
-        params={"command_name": "base_velocity", "std": 0.2, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
+        weight=4.0,
+        params={"command_name": "base_velocity", "std": 0.1, "linear_coef": 1.0, "asset_cfg": virtual_chassis_body_cfg()},
     )
     track_ang_vel_z_exp = RewTerm(
         func=mdp.VirtualChassisTrackAngVelZExp,
-        weight=5.0,
-        params={"command_name": "base_velocity", "std": 0.2, "linear_coef": 0.5, "asset_cfg": virtual_chassis_body_cfg()},
+        weight=6.0,
+        params={"command_name": "base_velocity", "std": 0.1, "linear_coef": 1.0, "asset_cfg": virtual_chassis_body_cfg()},
     )
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})

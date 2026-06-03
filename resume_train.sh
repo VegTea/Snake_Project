@@ -10,6 +10,7 @@ python scripts/rsl_rl/train.py \
     --headless \
     --resume \
     --logger wandb \
+    --log_project_name Snake_Project \
     --run_name "${RUN_NAME}_end" \
     --load_run "${RUN_NAME}" \
     --checkpoint "${CHECKPOINT_NAME}" \

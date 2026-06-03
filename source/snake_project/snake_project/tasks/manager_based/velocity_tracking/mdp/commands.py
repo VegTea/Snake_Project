@@ -86,6 +86,7 @@ class VirtualChassisVelocityCommand(SnakeVelocityCommand):
     def __init__(self, cfg: "VirtualChassisVelocityCommandCfg", env):
         super().__init__(cfg, env)
         self.robot: Articulation = env.scene[cfg.asset_name]
+        self.metrics["plannar_MAE"] = torch.zeros(self.num_envs, device=self.device)
         if not 0 <= cfg.debug_vis_env_idx < self.num_envs:
             raise ValueError(
                 f"debug_vis_env_idx={cfg.debug_vis_env_idx} is out of range for num_envs={self.num_envs}."
@@ -163,7 +164,11 @@ class VirtualChassisVelocityCommand(SnakeVelocityCommand):
         _, _, lin_vel_vc, ang_vel_z_vc = self._compute_virtual_state()
         max_command_time = self.cfg.resampling_time_range[1]
         max_command_step = max_command_time / self._env.step_dt
-        self.metrics["error_vel_xy"] += torch.norm(self.vel_command_b[:, :2] - lin_vel_vc[:, :2], dim=-1) / max_command_step
+        planar_error = self.vel_command_b[:, :2] - lin_vel_vc[:, :2]
+        self.metrics["error_vel_xy"] += torch.norm(planar_error, dim=-1) / max_command_step
+        self.metrics["plannar_MAE"] += torch.sqrt(
+            torch.sum(torch.square(planar_error), dim=-1) + torch.square(ang_vel_z_vc)
+        ) / max_command_step
         self.metrics["error_vel_yaw"] += torch.abs(self.vel_command_b[:, 2] - ang_vel_z_vc) / max_command_step
 
     def _update_command(self):
