@@ -93,8 +93,8 @@ class SnakeVelocityCommandsCfg:
         velocity_marker_max_speed=0.75,
         velocity_marker_z_offset=0.10,
         ranges=mdp.VirtualChassisVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.4, 0.4),
-            lin_vel_y=(-0.2, 0.2),
+            lin_vel_x=(-0.2, 0.2),
+            lin_vel_y=(-0.1, 0.1),
             ang_vel_z=(-0.0, 0.0),
             heading=(-0.0, 0.0),
         ),
@@ -244,14 +244,14 @@ class SnakeVelocityRewardsCfg:
 
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.VirtualChassisTrackLinVelXYExp,
-        weight=5.0,
-        params={"command_name": "base_velocity", "std": 0.1, "linear_coef": 1.0, "asset_cfg": virtual_chassis_body_cfg()},
+        weight=8.0,
+        params={"command_name": "base_velocity", "std": 0.25, "linear_coef": 0.0, "asset_cfg": virtual_chassis_body_cfg()},
     )
     
     track_ang_vel_z_exp = RewTerm(
         func=mdp.VirtualChassisTrackAngVelZExp,
-        weight=5.0,
-        params={"command_name": "base_velocity", "std": 0.1, "linear_coef": 1.0, "asset_cfg": virtual_chassis_body_cfg()},
+        weight=1.0,
+        params={"command_name": "base_velocity", "std": 0.25, "linear_coef": 0.0, "asset_cfg": virtual_chassis_body_cfg()},
     )
     # ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     
@@ -263,7 +263,7 @@ class SnakeVelocityRewardsCfg:
 
     joint_pos_rate = RewTerm(
         func=mdp.JointPositionRatePenalty,
-        weight=-2.0,
+        weight=-1.0,
         params={"asset_cfg": yaw_joint_cfg(), "rate_clip": 0.5},
     )
     
