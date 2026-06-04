@@ -114,9 +114,11 @@ class SnakeVelocityActionsCfg:
         amplitude=0.20,
         phase_lag=math.pi / 3.0,
         frequency_min=0.0,
-        moving_frequency_min=0.4,
+        moving_frequency_min=0.1,
         frequency_max=2.0,
         bias_max=0.35,
+        bias_gate_speed=0.08,
+        max_bias_rate=0.15,
         command_name="base_velocity",
         command_deadband=0.03,
         moving_command_deadband=0.03,
@@ -252,8 +254,8 @@ class SnakeVelocityRewardsCfg:
     
     track_ang_vel_z_exp = RewTerm(
         func=mdp.VirtualChassisTrackAngVelZExp,
-        weight=2.0,
-        params={"command_name": "base_velocity", "std": 0.25, "linear_coef": 0.0, "asset_cfg": virtual_chassis_body_cfg()},
+        weight=4.0,
+        params={"command_name": "base_velocity", "std": 0.15, "linear_coef": 0.0, "asset_cfg": virtual_chassis_body_cfg()},
     )
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     
@@ -268,6 +270,8 @@ class SnakeVelocityRewardsCfg:
         weight=-1.0,
         params={"asset_cfg": yaw_joint_cfg(), "rate_clip": 0.5},
     )
+
+    gait_bias_l2 = RewTerm(func=mdp.gait_bias_l2, weight=-0.2, params={"action_term_name": "joint_pos"})
     
     # sine_wave_position = RewTerm(
     #     func=mdp.sine_wave_position_tracking,

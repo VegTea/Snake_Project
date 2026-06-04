@@ -21,6 +21,8 @@ class SineGaitPolicyExporter(torch.nn.Module):
         moving_frequency_min: float = 0.1,
         frequency_max: float = 2.0,
         bias_max: float = 0.35,
+        bias_gate_speed: float = 0.08,
+        max_bias_rate: float = 0.15,
         policy_dt: float = 0.02,
         command_deadband: float = 0.03,
         moving_command_deadband: float = 0.03,
@@ -45,12 +47,15 @@ class SineGaitPolicyExporter(torch.nn.Module):
         self.moving_frequency_min = float(moving_frequency_min)
         self.frequency_max = float(frequency_max)
         self.bias_max = float(bias_max)
+        self.bias_gate_speed = float(bias_gate_speed)
+        self.max_bias_rate = float(max_bias_rate)
         self.policy_dt = float(policy_dt)
         self.command_deadband = float(command_deadband)
         self.moving_command_deadband = float(moving_command_deadband)
         self.positive_vx_phase_sign = float(positive_vx_phase_sign)
 
         self.register_buffer("phase", torch.zeros(1, 1))
+        self.register_buffer("bias", torch.zeros(1, 1))
         self.register_buffer("joint_index", torch.arange(num_joints, dtype=torch.float32).unsqueeze(0))
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
@@ -58,18 +63,31 @@ class SineGaitPolicyExporter(torch.nn.Module):
         raw_frequency = raw_action[:, 0:1]
         raw_bias = raw_action[:, 1:2]
 
-        bias = self.bias_max * torch.tanh(raw_bias)
-
         cmd_vx = obs[:, 6:7]
         cmd_vy = obs[:, 7:8]
         command_speed = torch.norm(obs[:, 6:8], dim=1, keepdim=True)
+        bias_gate = torch.clamp(command_speed / self.bias_gate_speed, min=0.0, max=1.0)
+        bias_target = bias_gate * self.bias_max * torch.tanh(raw_bias)
+        current_bias = self.bias.expand_as(bias_target)
+        next_bias = current_bias + torch.clamp(
+            bias_target - current_bias,
+            min=-self.max_bias_rate * self.policy_dt,
+            max=self.max_bias_rate * self.policy_dt,
+        )
+        self.bias[:] = next_bias[:1]
+
         frequency_min = torch.where(
             command_speed > self.moving_command_deadband,
             torch.ones_like(command_speed) * self.moving_frequency_min,
             torch.ones_like(command_speed) * self.frequency_min,
         )
         frequency_max = torch.ones_like(command_speed) * self.frequency_max
-        frequency = frequency_min + 0.5 * (torch.tanh(raw_frequency) + 1.0) * (frequency_max - frequency_min)
+        moving_frequency = frequency_min + 0.5 * (torch.tanh(raw_frequency) + 1.0) * (frequency_max - frequency_min)
+        frequency = torch.where(
+            command_speed > self.moving_command_deadband,
+            moving_frequency,
+            torch.zeros_like(moving_frequency),
+        )
 
         positive = torch.ones_like(cmd_vx) * self.positive_vx_phase_sign
         phase_sign = torch.where(
@@ -86,12 +104,13 @@ class SineGaitPolicyExporter(torch.nn.Module):
         next_phase = torch.remainder(self.phase + 2.0 * math.pi * frequency * self.policy_dt, 2.0 * math.pi)
         self.phase[:] = next_phase[:1]
 
-        joint_action = bias + self.amplitude * torch.sin(next_phase + self.joint_index * spatial_phase_lag)
+        joint_action = next_bias + self.amplitude * torch.sin(next_phase + self.joint_index * spatial_phase_lag)
         return joint_action / self.action_scale
 
     @torch.jit.export
     def reset(self):
         self.phase[:] = 0.0
+        self.bias[:] = 0.0
 
 
 def export_sine_gait_policy_as_jit(policy, normalizer, action_cfg, path: str, filename: str = "policy.pt") -> None:
@@ -105,6 +124,8 @@ def export_sine_gait_policy_as_jit(policy, normalizer, action_cfg, path: str, fi
         moving_frequency_min=action_cfg.moving_frequency_min,
         frequency_max=action_cfg.frequency_max,
         bias_max=action_cfg.bias_max,
+        bias_gate_speed=action_cfg.bias_gate_speed,
+        max_bias_rate=action_cfg.max_bias_rate,
         policy_dt=0.02,
         command_deadband=action_cfg.command_deadband,
         moving_command_deadband=action_cfg.moving_command_deadband,

@@ -239,6 +239,14 @@ class JointPositionRatePenalty(ManagerTermBase):
         return torch.sum(torch.square(delta), dim=1)
 
 
+def gait_bias_l2(env: "ManagerBasedRLEnv", action_term_name: str = "joint_pos") -> torch.Tensor:
+    """Penalty on the sine-gait bias state, excluding the normal traveling wave."""
+    action_term = env.action_manager.get_term(action_term_name)
+    if not hasattr(action_term, "current_bias"):
+        return torch.zeros(env.num_envs, device=env.device)
+    return torch.sum(torch.square(action_term.current_bias), dim=1)
+
+
 class VirtualChassisTrackLinVelXYExp(ManagerTermBase):
     """Reward planar command tracking in the virtual chassis frame."""
 

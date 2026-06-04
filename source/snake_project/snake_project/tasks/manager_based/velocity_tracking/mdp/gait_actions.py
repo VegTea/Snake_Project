@@ -22,6 +22,7 @@ class SineGaitAction(ActionTerm):
         self._raw_joint_actions = torch.zeros(self.num_envs, self._num_joints, device=self.device)
         self._processed_actions = torch.zeros_like(self._raw_joint_actions)
         self._phase = torch.zeros(self.num_envs, 1, device=self.device)
+        self._bias = torch.zeros(self.num_envs, 1, device=self.device)
         self._joint_index = torch.arange(self._num_joints, device=self.device, dtype=torch.float32).unsqueeze(0)
         self._default_joint_pos = self._asset.data.default_joint_pos[:, self._joint_ids].clone()
 
@@ -38,24 +39,37 @@ class SineGaitAction(ActionTerm):
     def processed_actions(self) -> torch.Tensor:
         return self._processed_actions
 
+    @property
+    def current_bias(self) -> torch.Tensor:
+        return self._bias
+
     def process_actions(self, actions: torch.Tensor):
         self._raw_policy_actions[:] = actions
 
         raw_frequency = actions[:, 0:1]
         raw_bias = actions[:, 1:2]
-        bias = self.cfg.bias_max * torch.tanh(raw_bias)
 
         command = self._env.command_manager.get_command(self.cfg.command_name)
         command_vx = command[:, 0:1]
         command_vy = command[:, 1:2]
         command_speed = torch.norm(command[:, :2], dim=1, keepdim=True)
+        bias_gate = torch.clamp(command_speed / float(self.cfg.bias_gate_speed), min=0.0, max=1.0)
+        bias_target = bias_gate * float(self.cfg.bias_max) * torch.tanh(raw_bias)
+        max_bias_delta = float(self.cfg.max_bias_rate) * float(self._env.step_dt)
+        self._bias = self._bias + torch.clamp(bias_target - self._bias, min=-max_bias_delta, max=max_bias_delta)
+
         frequency_min = torch.where(
             command_speed > self.cfg.moving_command_deadband,
             torch.ones_like(command_speed) * float(self.cfg.moving_frequency_min),
             torch.ones_like(command_speed) * float(self.cfg.frequency_min),
         )
         frequency_max = torch.ones_like(command_speed) * float(self.cfg.frequency_max)
-        frequency = frequency_min + 0.5 * (torch.tanh(raw_frequency) + 1.0) * (frequency_max - frequency_min)
+        moving_frequency = frequency_min + 0.5 * (torch.tanh(raw_frequency) + 1.0) * (frequency_max - frequency_min)
+        frequency = torch.where(
+            command_speed > self.cfg.moving_command_deadband,
+            moving_frequency,
+            torch.zeros_like(moving_frequency),
+        )
 
         phase_sign = torch.where(
             command_vx > self.cfg.command_deadband,
@@ -76,7 +90,7 @@ class SineGaitAction(ActionTerm):
             self._phase + 2.0 * math.pi * frequency * float(self._env.step_dt),
             2.0 * math.pi,
         )
-        q_offset = float(self.cfg.amplitude) * torch.sin(self._phase + self._joint_index * spatial_phase_lag) + bias
+        q_offset = float(self.cfg.amplitude) * torch.sin(self._phase + self._joint_index * spatial_phase_lag) + self._bias
         q_target = self._default_joint_pos + q_offset
         q_target = torch.clamp(q_target, min=float(self.cfg.target_clip[0]), max=float(self.cfg.target_clip[1]))
 
@@ -93,6 +107,7 @@ class SineGaitAction(ActionTerm):
         self._raw_joint_actions[env_ids] = 0.0
         self._processed_actions[env_ids] = self._default_joint_pos[env_ids]
         self._phase[env_ids] = 0.0
+        self._bias[env_ids] = 0.0
 
 
 @configclass
@@ -106,9 +121,11 @@ class SineGaitActionCfg(ActionTermCfg):
     amplitude: float = 0.20
     phase_lag: float = math.pi / 3.0
     frequency_min: float = 0.0
-    moving_frequency_min: float = 0.4
+    moving_frequency_min: float = 0.1
     frequency_max: float = 2.0
     bias_max: float = 0.35
+    bias_gate_speed: float = 0.08
+    max_bias_rate: float = 0.15
     command_name: str = "base_velocity"
     command_deadband: float = 0.03
     moving_command_deadband: float = 0.03
