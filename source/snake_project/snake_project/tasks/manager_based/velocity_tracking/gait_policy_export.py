@@ -18,10 +18,12 @@ class SineGaitPolicyExporter(torch.nn.Module):
         phase_lag: float = math.pi / 3.0,
         action_scale: float = 0.25,
         frequency_min: float = 0.0,
+        moving_frequency_min: float = 0.1,
         frequency_max: float = 2.0,
         bias_max: float = 0.35,
         policy_dt: float = 0.02,
         command_deadband: float = 0.03,
+        moving_command_deadband: float = 0.03,
         positive_vx_phase_sign: float = 1.0,
         num_joints: int = 7,
     ):
@@ -40,10 +42,12 @@ class SineGaitPolicyExporter(torch.nn.Module):
         self.phase_lag = float(abs(phase_lag))
         self.action_scale = float(action_scale)
         self.frequency_min = float(frequency_min)
+        self.moving_frequency_min = float(moving_frequency_min)
         self.frequency_max = float(frequency_max)
         self.bias_max = float(bias_max)
         self.policy_dt = float(policy_dt)
         self.command_deadband = float(command_deadband)
+        self.moving_command_deadband = float(moving_command_deadband)
         self.positive_vx_phase_sign = float(positive_vx_phase_sign)
 
         self.register_buffer("phase", torch.zeros(1, 1))
@@ -54,17 +58,28 @@ class SineGaitPolicyExporter(torch.nn.Module):
         raw_frequency = raw_action[:, 0:1]
         raw_bias = raw_action[:, 1:2]
 
-        frequency = self.frequency_min + 0.5 * (torch.tanh(raw_frequency) + 1.0) * (
-            self.frequency_max - self.frequency_min
-        )
         bias = self.bias_max * torch.tanh(raw_bias)
 
         cmd_vx = obs[:, 6:7]
+        cmd_vy = obs[:, 7:8]
+        command_speed = torch.norm(obs[:, 6:8], dim=1, keepdim=True)
+        frequency_min = torch.where(
+            command_speed > self.moving_command_deadband,
+            torch.ones_like(command_speed) * self.moving_frequency_min,
+            torch.ones_like(command_speed) * self.frequency_min,
+        )
+        frequency_max = torch.ones_like(command_speed) * self.frequency_max
+        frequency = frequency_min + 0.5 * (torch.tanh(raw_frequency) + 1.0) * (frequency_max - frequency_min)
+
         positive = torch.ones_like(cmd_vx) * self.positive_vx_phase_sign
         phase_sign = torch.where(
             cmd_vx > self.command_deadband,
             positive,
-            torch.where(cmd_vx < -self.command_deadband, -positive, torch.zeros_like(cmd_vx)),
+            torch.where(
+                cmd_vx < -self.command_deadband,
+                -positive,
+                torch.where(torch.abs(cmd_vy) > self.command_deadband, positive, torch.zeros_like(cmd_vx)),
+            ),
         )
         spatial_phase_lag = self.phase_lag * phase_sign
 
@@ -87,10 +102,12 @@ def export_sine_gait_policy_as_jit(policy, normalizer, action_cfg, path: str, fi
         phase_lag=action_cfg.phase_lag,
         action_scale=action_cfg.action_scale,
         frequency_min=action_cfg.frequency_min,
+        moving_frequency_min=action_cfg.moving_frequency_min,
         frequency_max=action_cfg.frequency_max,
         bias_max=action_cfg.bias_max,
         policy_dt=0.02,
         command_deadband=action_cfg.command_deadband,
+        moving_command_deadband=action_cfg.moving_command_deadband,
         positive_vx_phase_sign=action_cfg.positive_vx_phase_sign,
         num_joints=len(action_cfg.joint_names),
     )

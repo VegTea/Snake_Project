@@ -43,19 +43,31 @@ class SineGaitAction(ActionTerm):
 
         raw_frequency = actions[:, 0:1]
         raw_bias = actions[:, 1:2]
-        frequency = self.cfg.frequency_min + 0.5 * (torch.tanh(raw_frequency) + 1.0) * (
-            self.cfg.frequency_max - self.cfg.frequency_min
-        )
         bias = self.cfg.bias_max * torch.tanh(raw_bias)
 
-        command_vx = self._env.command_manager.get_command(self.cfg.command_name)[:, 0:1]
+        command = self._env.command_manager.get_command(self.cfg.command_name)
+        command_vx = command[:, 0:1]
+        command_vy = command[:, 1:2]
+        command_speed = torch.norm(command[:, :2], dim=1, keepdim=True)
+        frequency_min = torch.where(
+            command_speed > self.cfg.moving_command_deadband,
+            torch.ones_like(command_speed) * float(self.cfg.moving_frequency_min),
+            torch.ones_like(command_speed) * float(self.cfg.frequency_min),
+        )
+        frequency_max = torch.ones_like(command_speed) * float(self.cfg.frequency_max)
+        frequency = frequency_min + 0.5 * (torch.tanh(raw_frequency) + 1.0) * (frequency_max - frequency_min)
+
         phase_sign = torch.where(
             command_vx > self.cfg.command_deadband,
             torch.ones_like(command_vx) * float(self.cfg.positive_vx_phase_sign),
             torch.where(
                 command_vx < -self.cfg.command_deadband,
                 torch.ones_like(command_vx) * -float(self.cfg.positive_vx_phase_sign),
-                torch.zeros_like(command_vx),
+                torch.where(
+                    torch.abs(command_vy) > self.cfg.command_deadband,
+                    torch.ones_like(command_vx) * float(self.cfg.positive_vx_phase_sign),
+                    torch.zeros_like(command_vx),
+                ),
             ),
         )
         spatial_phase_lag = abs(float(self.cfg.phase_lag)) * phase_sign
@@ -94,9 +106,11 @@ class SineGaitActionCfg(ActionTermCfg):
     amplitude: float = 0.20
     phase_lag: float = math.pi / 3.0
     frequency_min: float = 0.0
+    moving_frequency_min: float = 0.4
     frequency_max: float = 2.0
     bias_max: float = 0.35
     command_name: str = "base_velocity"
     command_deadband: float = 0.03
+    moving_command_deadband: float = 0.03
     positive_vx_phase_sign: float = 1.0
     target_clip: tuple[float, float] = (-1.57, 1.57)
