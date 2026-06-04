@@ -1,8 +1,7 @@
 CHECKPOINT=$1
 LOG_DIR="${LOG_DIR:-$(dirname "${CHECKPOINT}")}"
 
-ACCEPT_EULA=Y conda run -n env_isaaclab python \
-  source/snake_project/snake_project/tasks/manager_based/velocity_tracking/export_gait_policy.py \
+ACCEPT_EULA=Y python source/snake_project/snake_project/tasks/manager_based/velocity_tracking/export_gait_policy.py \
   --task Snake-VelocityTracking-Flat-Play-v0 \
   --checkpoint "${CHECKPOINT}" \
   --output "${LOG_DIR}/exported/policy.pt" \
