@@ -115,7 +115,7 @@ class SnakeVelocityActionsCfg:
         phase_lag=math.pi / 3.0,
         frequency_min=0.0,
         moving_frequency_min=0.1,
-        frequency_max=2.0,
+        frequency_max=0.4,
         bias_max=0.35,
         bias_gate_speed=0.08,
         max_bias_rate=0.15,

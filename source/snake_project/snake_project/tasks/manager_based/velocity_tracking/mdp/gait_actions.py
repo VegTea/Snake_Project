@@ -122,7 +122,7 @@ class SineGaitActionCfg(ActionTermCfg):
     phase_lag: float = math.pi / 3.0
     frequency_min: float = 0.0
     moving_frequency_min: float = 0.1
-    frequency_max: float = 2.0
+    frequency_max: float = 0.4
     bias_max: float = 0.35
     bias_gate_speed: float = 0.08
     max_bias_rate: float = 0.15
