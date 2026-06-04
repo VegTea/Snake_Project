@@ -115,8 +115,8 @@ class SnakeVelocityActionsCfg:
         phase_lag=math.pi / 3.0,
         frequency_min=0.0,
         moving_frequency_min=0.1,
-        frequency_max=0.4,
-        bias_max=0.35,
+        frequency_max=2.0,
+        bias_max=0.25,
         bias_gate_speed=0.08,
         max_bias_rate=0.15,
         command_name="base_velocity",
@@ -140,9 +140,8 @@ class SnakeVelocityObservationsCfg:
             func=mdp.generated_commands,
             params={"command_name": "base_velocity"},
         )
-        joint_pos = ObsTerm(func=mdp.joint_pos_rel, params={"asset_cfg": yaw_joint_cfg()}, noise=Unoise(n_min=-0.01, n_max=0.01))
-        joint_vel = ObsTerm(func=mdp.joint_vel_rel, params={"asset_cfg": yaw_joint_cfg()}, noise=Unoise(n_min=-0.01, n_max=0.01))
-        last_actions = ObsTerm(func=mdp.last_raw_actions, params={"action_name": "joint_pos"})
+        gait_parameters = ObsTerm(func=mdp.gait_parameters, params={"action_name": "joint_pos"})
+        episode_time = ObsTerm(func=mdp.episode_time)
 
         def __post_init__(self) -> None:
             self.enable_corruption = True
@@ -157,9 +156,8 @@ class SnakeVelocityObservationsCfg:
             func=mdp.generated_commands,
             params={"command_name": "base_velocity"},
         )
-        joint_pos = ObsTerm(func=mdp.joint_pos_rel, params={"asset_cfg": yaw_joint_cfg()}, noise=Unoise(n_min=-0.01, n_max=0.01))
-        joint_vel = ObsTerm(func=mdp.joint_vel_rel, params={"asset_cfg": yaw_joint_cfg()}, noise=Unoise(n_min=-0.01, n_max=0.01))
-        last_actions = ObsTerm(func=mdp.last_raw_actions, params={"action_name": "joint_pos"})
+        gait_parameters = ObsTerm(func=mdp.gait_parameters, params={"action_name": "joint_pos"})
+        episode_time = ObsTerm(func=mdp.episode_time)
 
         def __post_init__(self) -> None:
             self.enable_corruption = False
@@ -249,21 +247,21 @@ class SnakeVelocityRewardsCfg:
     track_lin_vel_xy_exp = RewTerm(
         func=mdp.VirtualChassisTrackLinVelXYExp,
         weight=4.0,
-        params={"command_name": "base_velocity", "std": 0.25, "linear_coef": 0.0, "asset_cfg": virtual_chassis_body_cfg()},
+        params={"command_name": "base_velocity", "std": 0.1, "linear_coef": 0.1, "asset_cfg": virtual_chassis_body_cfg()},
     )
     
     track_ang_vel_z_exp = RewTerm(
         func=mdp.VirtualChassisTrackAngVelZExp,
         weight=4.0,
-        params={"command_name": "base_velocity", "std": 0.15, "linear_coef": 0.0, "asset_cfg": virtual_chassis_body_cfg()},
+        params={"command_name": "base_velocity", "std": 0.1, "linear_coef": 0.1, "asset_cfg": virtual_chassis_body_cfg()},
     )
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    # ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
     
-    joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
+    # joint_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4, params={"asset_cfg": yaw_joint_cfg()})
     
-    joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
+    # joint_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7, params={"asset_cfg": yaw_joint_cfg()})
     
-    raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
+    # raw_action_rate = RewTerm(func=mdp.RawActionRatePenalty, weight=-0.01, params={"action_term_name": "joint_pos"})
 
     joint_pos_rate = RewTerm(
         func=mdp.JointPositionRatePenalty,

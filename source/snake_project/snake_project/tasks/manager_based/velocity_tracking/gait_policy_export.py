@@ -19,8 +19,8 @@ class SineGaitPolicyExporter(torch.nn.Module):
         action_scale: float = 0.25,
         frequency_min: float = 0.0,
         moving_frequency_min: float = 0.1,
-        frequency_max: float = 0.4,
-        bias_max: float = 0.35,
+        frequency_max: float = 2.0,
+        bias_max: float = 0.25,
         bias_gate_speed: float = 0.08,
         max_bias_rate: float = 0.15,
         policy_dt: float = 0.02,
@@ -56,10 +56,19 @@ class SineGaitPolicyExporter(torch.nn.Module):
 
         self.register_buffer("phase", torch.zeros(1, 1))
         self.register_buffer("bias", torch.zeros(1, 1))
+        self.register_buffer("frequency", torch.zeros(1, 1))
+        self.register_buffer("time", torch.zeros(1, 1))
         self.register_buffer("joint_index", torch.arange(num_joints, dtype=torch.float32).unsqueeze(0))
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
-        raw_action = self.actor(self.normalizer(obs))
+        batch = obs.shape[0]
+        if obs.shape[1] == 12:
+            actor_obs = obs
+        else:
+            gait_params = torch.cat([self.frequency.expand(batch, 1), self.bias.expand(batch, 1)], dim=1)
+            episode_time = self.time.expand(batch, 1)
+            actor_obs = torch.cat([obs[:, :9], gait_params, episode_time], dim=1)
+        raw_action = self.actor(self.normalizer(actor_obs))
         raw_frequency = raw_action[:, 0:1]
         raw_bias = raw_action[:, 1:2]
 
@@ -88,6 +97,7 @@ class SineGaitPolicyExporter(torch.nn.Module):
             moving_frequency,
             torch.zeros_like(moving_frequency),
         )
+        self.frequency[:] = frequency[:1]
 
         positive = torch.ones_like(cmd_vx) * self.positive_vx_phase_sign
         phase_sign = torch.where(
@@ -103,6 +113,7 @@ class SineGaitPolicyExporter(torch.nn.Module):
 
         next_phase = torch.remainder(self.phase + 2.0 * math.pi * frequency * self.policy_dt, 2.0 * math.pi)
         self.phase[:] = next_phase[:1]
+        self.time[:] = self.time + self.policy_dt
 
         joint_action = next_bias + self.amplitude * torch.sin(next_phase + self.joint_index * spatial_phase_lag)
         return joint_action / self.action_scale
@@ -111,6 +122,8 @@ class SineGaitPolicyExporter(torch.nn.Module):
     def reset(self):
         self.phase[:] = 0.0
         self.bias[:] = 0.0
+        self.frequency[:] = 0.0
+        self.time[:] = 0.0
 
 
 def export_sine_gait_policy_as_jit(policy, normalizer, action_cfg, path: str, filename: str = "policy.pt") -> None:

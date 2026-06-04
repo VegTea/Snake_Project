@@ -11,6 +11,7 @@ runs 15 s per condition (first 3 s warm-up excluded from MAE), and produces:
   - summary_trajectory.png     (base_link + VC XY per condition)
   - summary_velocity_vx.png    (cmd vs VC vx per condition)
   - summary_velocity_vy.png    (cmd vs VC vy per condition)
+  - summary_sine_controller.png (frequency + bias per condition, sine_controller mode)
   - data/eval_data.npz         (raw logs)
   - data/eval_mae.csv          (MAE table)
 
@@ -33,6 +34,15 @@ import numpy as np
 import torch
 
 matplotlib.use("Agg")
+
+try:
+    from sine_wave_mujoco import MujocoSineWaveRunner, SineWaveCfg
+except ImportError:
+    try:
+        from .sine_wave_mujoco import MujocoSineWaveRunner, SineWaveCfg
+    except ImportError:
+        MujocoSineWaveRunner = None
+        SineWaveCfg = None
 
 # fix seeds for reproducibility
 SEED = 42
@@ -545,6 +555,126 @@ def plot_summary_velocity(
     print(f"[Plot] Saved: {output_path}")
 
 
+def plot_summary_sine_controller(
+    vx_vals,
+    vy_vals,
+    all_data: dict,
+    output_path: str,
+):
+    nx, ny = len(vx_vals), len(vy_vals)
+    fig, axes = plt.subplots(nx, ny, figsize=(ny * 4, nx * 3.8))
+    axes = np.atleast_2d(axes)
+
+    for i, vx in enumerate(vx_vals):
+        for j, vy in enumerate(vy_vals):
+            ax = axes[i, j]
+            key = f"vx{vx}_vy{vy}"
+            if key not in all_data:
+                ax.set_visible(False)
+                continue
+            d = all_data[key]
+            if "frequency" not in d or "bias" not in d:
+                ax.set_visible(False)
+                continue
+
+            t = d["t"]
+            ax.plot(t, d["frequency"], color="#2ca02c", linewidth=CURVE_LINE_WIDTH, label="frequency")
+            ax.set_ylabel("frequency (Hz)", fontsize=7, color="#2ca02c")
+            ax.tick_params(axis="y", labelsize=6, labelcolor="#2ca02c")
+            ax.tick_params(axis="x", labelsize=6)
+            ax.grid(True, alpha=GRID_ALPHA)
+            ax.axvline(x=3.0, color="gray", linestyle=VERTICAL_LINE_STYLE, alpha=0.5, linewidth=0.8)
+
+            ax_bias = ax.twinx()
+            ax_bias.plot(t, d["bias"], color="#9467bd", linewidth=CURVE_LINE_WIDTH, label="bias")
+            ax_bias.set_ylabel("bias (rad)", fontsize=7, color="#9467bd")
+            ax_bias.tick_params(axis="y", labelsize=6, labelcolor="#9467bd")
+            ax.set_title(f"vx={vx} vy={vy}", fontsize=8)
+            if i == nx - 1:
+                ax.set_xlabel("Time (s)", fontsize=7)
+
+    fig.suptitle("Sine Controller Summary - Frequency and Bias", fontweight="bold", fontsize=13)
+    handles = [
+        plt.Line2D([0], [0], color="#2ca02c", lw=1.5, label="frequency"),
+        plt.Line2D([0], [0], color="#9467bd", lw=1.5, label="bias"),
+    ]
+    fig.legend(handles, ["frequency", "bias"], loc="upper right",
+               bbox_to_anchor=(0.99, 0.99), fontsize=9)
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    fig.savefig(output_path, dpi=200)
+    plt.close(fig)
+    print(f"[Plot] Saved: {output_path}")
+
+
+def sine_rows_to_eval_data(rows: List[dict]) -> Dict[str, np.ndarray]:
+    numeric_keys = (
+        "vc_vx", "vc_vy", "vc_wz", "vc_x", "vc_y",
+        "base_vx_w", "base_vy_w", "base_vz_w", "base_x", "base_y",
+        "frequency", "bias", "cmd_theta", "theta_feedback",
+    )
+    data = {
+        "t": np.array([row["time"] for row in rows], dtype=np.float32),
+    }
+    for key in numeric_keys:
+        if key in rows[0]:
+            data[key] = np.array([row[key] for row in rows], dtype=np.float32)
+    return data
+
+
+def run_sine_controller_condition(args, vx: float, vy: float) -> Dict[str, np.ndarray]:
+    if MujocoSineWaveRunner is None or SineWaveCfg is None:
+        raise RuntimeError("Cannot import sine_wave_mujoco.py for sine_controller eval.")
+
+    runner = MujocoSineWaveRunner(
+        mjcf_path=args.mjcf,
+        cfg=SineWaveCfg(),
+        headless=True,
+        record_video=False,
+        video_path="",
+        video_fps=50.0,
+    )
+    runner.run(
+        seconds=float(args.seconds),
+        amplitude=float(args.sine_amplitude),
+        frequency=float(args.sine_frequency),
+        phase_lag=float(args.sine_phase_lag),
+        auto_phase_lag=bool(args.sine_auto_phase_lag),
+        positive_vx_phase_sign=float(args.sine_positive_vx_phase_sign),
+        bias=float(args.sine_bias),
+        bias_schedule=tuple(),
+        controller=True,
+        cmd_vx=float(vx),
+        cmd_vy=float(vy),
+        control_dt=float(args.sine_control_dt),
+        controller_start=float(args.sine_controller_start),
+        theta_kp=float(args.sine_theta_kp),
+        theta_kd=float(args.sine_theta_kd),
+        heading_command_mode=str(args.sine_heading_command_mode),
+        reverse_heading_gain=bool(args.sine_reverse_heading_gain),
+        speed_kp=float(args.sine_speed_kp),
+        speed_kd=float(args.sine_speed_kd),
+        theta_source=str(args.sine_theta_source),
+        min_frequency=float(args.sine_min_frequency),
+        max_frequency=float(args.sine_max_frequency),
+        max_bias=float(args.sine_max_bias),
+        max_bias_rate=float(args.sine_max_bias_rate),
+        theta_speed_gate=float(args.sine_theta_speed_gate),
+        theta_filter_tau=float(args.sine_theta_filter_tau),
+        theta_deadband_speed=float(args.sine_theta_deadband_speed),
+        log_path=None,
+        plot_path=None,
+        theta_plot_path=None,
+        log_warmup=float(args.warmup),
+        realtime=False,
+        realtime_factor=1.0,
+        lead=0.0,
+    )
+    if not runner._log_rows:
+        raise RuntimeError("Sine controller eval produced no log rows.")
+    return sine_rows_to_eval_data(runner._log_rows)
+
+
 # ---------------------------------------------------------------------------
 # Main batch evaluation
 # ---------------------------------------------------------------------------
@@ -573,9 +703,12 @@ def run_eval(args):
                 cmd_vy=float(vy),
                 cmd_wz=0.0,
             )
-            runner = EvalRunner(args.mjcf, args.policy, cfg)
             print(f"[{count}/{total}] Running vx={vx:+.2f} vy={vy:+.2f} ... ", end="", flush=True)
-            data = runner.run(seconds=args.seconds)
+            if args.policy_type == "sine_controller":
+                data = run_sine_controller_condition(args, float(vx), float(vy))
+            else:
+                runner = EvalRunner(args.mjcf, args.policy, cfg)
+                data = runner.run(seconds=args.seconds)
             mae_planar, mae_vx, mae_vy = compute_mae(float(vx), float(vy), data, warmup=args.warmup)
             mae_wz = compute_wz_mae(data, warmup=args.warmup)
             print(f"planar_MAE={mae_planar:.4f}")
@@ -585,10 +718,23 @@ def run_eval(args):
             mae_vx_grid[i, j] = mae_vx
             mae_vy_grid[i, j] = mae_vy
             mae_wz_grid[i, j] = mae_wz
-            mae_table.append({
+            row = {
                 "vx": float(vx), "vy": float(vy),
                 "planar_mae": mae_planar, "vx_mae": mae_vx, "vy_mae": mae_vy, "wz_mae": mae_wz,
-            })
+            }
+            if "frequency" in data and "bias" in data:
+                mask = data["t"] >= args.warmup
+                if not np.any(mask):
+                    mask = np.ones_like(data["t"], dtype=bool)
+                row.update({
+                    "frequency_mean": float(np.mean(data["frequency"][mask])),
+                    "frequency_min": float(np.min(data["frequency"][mask])),
+                    "frequency_max": float(np.max(data["frequency"][mask])),
+                    "bias_mean": float(np.mean(data["bias"][mask])),
+                    "bias_min": float(np.min(data["bias"][mask])),
+                    "bias_max": float(np.max(data["bias"][mask])),
+                })
+            mae_table.append(row)
 
     # --- output plots ---
     out_dir = args.output_dir
@@ -604,6 +750,9 @@ def run_eval(args):
                           os.path.join(out_dir, "summary_velocity_vy.png"))
     plot_summary_velocity(vx_vals, vy_vals, all_data, "wz",
                           os.path.join(out_dir, "summary_velocity_wz.png"))
+    if args.policy_type == "sine_controller":
+        plot_summary_sine_controller(vx_vals, vy_vals, all_data,
+                                     os.path.join(out_dir, "summary_sine_controller.png"))
 
     # --- data export ---
     data_dir = os.path.join(out_dir, "data")
@@ -612,8 +761,14 @@ def run_eval(args):
     np.savez_compressed(os.path.join(data_dir, "eval_data.npz"), **all_data)
 
     csv_path = os.path.join(data_dir, "eval_mae.csv")
+    fieldnames = ["vx", "vy", "planar_mae", "vx_mae", "vy_mae", "wz_mae"]
+    if args.policy_type == "sine_controller":
+        fieldnames += [
+            "frequency_mean", "frequency_min", "frequency_max",
+            "bias_mean", "bias_min", "bias_max",
+        ]
     with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["vx", "vy", "planar_mae", "vx_mae", "vy_mae", "wz_mae"])
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(mae_table)
     print(f"[Data] Saved: {csv_path}")
@@ -637,7 +792,9 @@ def run_eval(args):
 
 def parse_args():
     ap = argparse.ArgumentParser(description="Batch sim2sim velocity-tracking evaluation")
-    ap.add_argument("--policy", type=str, required=True,
+    ap.add_argument("--policy-type", type=str, default="policy", choices=["policy", "sine_controller"],
+                    help="Evaluation controller: TorchScript policy or built-in sine controller")
+    ap.add_argument("--policy", type=str, default="",
                     help="Path to TorchScript policy (jit .pt)")
     ap.add_argument("--mjcf", type=str,
                     default="source/snake_project/snake_project/data/Snake/14DOF-DW.xml",
@@ -651,12 +808,41 @@ def parse_args():
                     default="sim2sim/eval_output",
                     help="Output directory for plots and data")
     ap.add_argument("--seed", type=int, default=1)
-    return ap.parse_args()
+    ap.add_argument("--sine-amplitude", type=float, default=0.20)
+    ap.add_argument("--sine-frequency", type=float, default=0.12)
+    ap.add_argument("--sine-phase-lag", type=float, default=math.pi / 3.0)
+    ap.add_argument("--sine-auto-phase-lag", type=int, default=1)
+    ap.add_argument("--sine-positive-vx-phase-sign", type=float, default=1.0)
+    ap.add_argument("--sine-bias", type=float, default=0.0)
+    ap.add_argument("--sine-control-dt", type=float, default=0.02)
+    ap.add_argument("--sine-controller-start", type=float, default=0.5)
+    ap.add_argument("--sine-theta-kp", type=float, default=0.2)
+    ap.add_argument("--sine-theta-kd", type=float, default=0.0)
+    ap.add_argument("--sine-heading-command-mode", type=str,
+                    choices=("body_lateral", "velocity_vector"), default="body_lateral")
+    ap.add_argument("--sine-reverse-heading-gain", type=int, default=1)
+    ap.add_argument("--sine-speed-kp", type=float, default=20.0)
+    ap.add_argument("--sine-speed-kd", type=float, default=0.0)
+    ap.add_argument("--sine-theta-source", type=str,
+                    choices=("vc_velocity", "heading"), default="heading")
+    ap.add_argument("--sine-min-frequency", type=float, default=0.0)
+    ap.add_argument("--sine-max-frequency", type=float, default=2.0)
+    ap.add_argument("--sine-max-bias", type=float, default=0.35)
+    ap.add_argument("--sine-max-bias-rate", type=float, default=0.15)
+    ap.add_argument("--sine-theta-speed-gate", type=float, default=0.15)
+    ap.add_argument("--sine-theta-filter-tau", type=float, default=0.4)
+    ap.add_argument("--sine-theta-deadband-speed", type=float, default=0.03)
+    args = ap.parse_args()
+    if args.policy_type == "policy" and not args.policy:
+        ap.error("--policy is required when --policy-type policy")
+    return args
 
 
 def main():
     args = parse_args()
-    print(f"[Eval] Policy : {args.policy}")
+    print(f"[Eval] Type   : {args.policy_type}")
+    if args.policy_type == "policy":
+        print(f"[Eval] Policy : {args.policy}")
     print(f"[Eval] MJCF   : {args.mjcf}")
     print(f"[Eval] Device : {args.device}")
     print(f"[Eval] Grid   : 5x5  (vx ∈ [-0.2, -0.1, 0.0, 0.1, 0.2], vy ∈ [-0.1, -0.05, 0.0, 0.05, 0.1])")
